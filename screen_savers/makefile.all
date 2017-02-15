@@ -1,0 +1,11 @@
+# makefile for all screen saver sample code
+
+LEAFDIRS = \
+	Ball \
+	Spots \
+	WhackLoader
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

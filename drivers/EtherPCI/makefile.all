@@ -1,0 +1,10 @@
+# makefile for the EtherPCI driver sample
+
+LEAFDIRS = \
+	Driver \
+	Addon
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

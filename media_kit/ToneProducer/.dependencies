@@ -1,0 +1,4 @@
+$(OBJ_DIR)/ToneProducer.o: ToneProducer.cpp ToneProducer.h
+$(OBJ_DIR)/NodeHarnessApp.o: NodeHarnessApp.cpp NodeHarnessApp.h NodeHarnessWin.h
+$(OBJ_DIR)/NodeHarnessWin.o: NodeHarnessWin.cpp NodeHarnessWin.h ToneProducer.h
+$(OBJ_DIR)/main.o: main.cpp NodeHarnessApp.h

@@ -1,0 +1,13 @@
+# makefile for all Game Kit sample code
+
+SUBDIRS = \
+	Chart \
+	PageFlipper \
+	SndFilePanel \
+	Stars \
+	Whack
+
+default .DEFAULT:
+	-@for f in $(SUBDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

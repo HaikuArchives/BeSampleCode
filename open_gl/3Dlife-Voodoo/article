@@ -1,0 +1,205 @@
+Life in Three Dimensions
+by Michael Morrissey
+
+The Game of Life is a classic programming exercise, perhaps
+second in popularity only to "Hello World".  It's fun to program 
+and it's really fun to watch the exciting patterns and interactions
+ appear and disappear.  But as exciting as that classic, 2D game is, 
+this is BeOS, and nothing less than three dimensions will do!  
+
+To visualize the 3D version of Life, we're going to use OpenGL.
+The beauty of OpenGL is that it allows you to concentrate on what
+you're trying to draw rather than on how to draw it.  Put another
+way, it makes you look pretty impressive with just a few lines
+of code!  
+
+The focus of this article is more on using OpenGL on BeOS, as
+opposed to an general OpenGL tutorial.  However, only basic OpenGL
+techniques are used in the code, so even if you're unfamiliar with
+OpenGL, you should be able to understand it.  It helps to arm
+yourself with a good OpenGL book; personally, I'd recommend
+"OpenGL Programming Guide, 2nd edition" by Woo, Neider, and Davis.
+
+The sample code for this application can be found at:
+
+	<ftp://ftp.be.com/pub/samples/open_gl/3dlife.zip>
+
+
+Before we dive into the code, we need a little background:
+
+Life is three dimensions is played in exactly the same manner
+as life is two dimensions.  For each cell, a count of the living
+neighbors is taken.  In two dimensions, there are eight neighbors,
+while in three dimensions, there are 26.  The number of living
+neighbors determines the fate of the cell in question: given
+enough living neighbors, but not too many, the cell may continue
+living.  Or, if the cell was not alive, it may spring to life in the next
+generation, if conditions are favorable.
+
+Carter Bays, a computer scientist at the University of South Carolina,
+has investigated three dimensional analouges of the standard, 
+two-dimensional game of life.  The trick in extending the game by an
+extra dimension is finding rules which properly balance life and death
+on our little "planet".  He has found two such sets of rules, called
+Life 4-5-5-5 and Life 5-7-6-6.  The first two numbers are the lower and
+upper bounds for sustaining life.  For example, in Life 4-5-5-5, if a
+living cell has less than four living neighbors, it will die of lonliness, but
+if it has more than five living neighbors, it will die of overcrowding.
+Similarly, the next two numbers are the lower and upper bounds for
+creating new life.  Again, in Life 4-5-5-5, if an empty cell has exactly
+five living neighbors, new life will be born.  Otherwise, the cell will
+remain empty.
+
+Now, onto the code!  As always, we want to start with a good, clean
+design, but one which will allow flexibility for future improvements.  
+Most importantly, we will not concern ourselves with optimizing the
+Life calculation code, tempting though it might be.  As Donald Knuth
+warns us, "Premature optimization is the root of all evil."
+
+The major component of our design centers around multithreading,
+which gives us better performance and better responsiveness than if
+we lumped all the code into a single thread.  We'll have three threads:
+one for the Life calculations, one for the drawing of the Life board,
+and one for the window.  (Of course, the window thread is created
+for us when we instantiate the BWindow, while the first two must be
+explicitly spawned.)  So in lifeView::AttachedToWindow(), we start
+the life calculation thread, and the drawing thread: 
+
+	// start a thread to calculate the board generations
+	lifeTID = spawn_thread((thread_entry)lifeThread, "lifeThread", 
+							B_NORMAL_PRIORITY, this);
+	resume_thread(lifeTID);
+
+	// start a thread which does all of the drawing
+	drawTID = spawn_thread((thread_entry)drawThread, "drawThread",
+								B_NORMAL_PRIORITY, this);
+	resume_thread(drawTID);
+
+Now that we've created them, these two threads need to be synchronized.
+It seems tempting to let the lifeThread calculate as many generations ahead
+as possible, queueing them up for display by drawThread, but it really won't
+buy us anything.  A little experimenting with BStopWatch confirms that displaying
+each generation takes much longer than the calculation of the next generation,
+so we only need to stay one step ahead of the display.
+
+We use two global semaphores, read_board_sem and write_board_sem, to
+let the lifeThread know when to calculate a new generation, and to let the
+drawThread know that there's a new generation to be displayed.  In lifeThread,
+we acquire the write_board_sem, calculate the next generation, and release
+the read_board_sem:
+
+	while(!(mv->QuitPending()))
+	{
+		nextGen = new bool[BOARD_SIZE][BOARD_SIZE][BOARD_SIZE];	
+
+		acquire_sem(write_board_sem);
+		if(mv->QuitPending())
+		{
+			// semaphore was released from ExitThreads()
+			break;
+		}
+
+		// calculate the next generation
+		DoLife(prevGen, nextGen);
+		
+		// "post" the next generation		
+		board = nextGen;
+		prevGen = nextGen;
+
+		release_sem(read_board_sem);
+	}
+
+QuitPending() is a function defined in the lifeView class which returns 
+a boolean flag.  The flag is set to true in the ExitThread() function if a 
+B_QUIT_REQUESTED message has been posted.  Checking this flag 
+with each pass of the loop allows the thread to exit gracefully.  It's 
+used in both the lifeThread and the drawThread.
+
+Similarly,  drawThread tries to acquire the read_board_sem, but here
+we use acquire_sem_etc, which allows us to timeout.  We may be 
+rotating the display, and we don't want to have to wait until the next
+generation is computed to rotate (as is the case if we're running in
+the single-step, rather than continuous, mode of life calculation):
+
+	while(!(mv->QuitPending()))
+	{
+		mv->SpinCalc();
+		mv->Display(displayBoard, generations, steadyFlag);
+		
+		if(mv->continuousMode() && steadyFlag)
+		{
+			mv->continuousMode(false);
+		}
+						
+		if(mv->continuousMode() || mv->singleStepMode())
+		{
+			if(acquire_sem_etc(read_board_sem, 1, 
+							B_TIMEOUT,100) != B_TIMED_OUT)
+			{
+				if(displayBoard) 
+				{
+					delete []displayBoard;
+				}
+			
+				displayBoard = board;
+				board = NULL;
+				generations++;
+				mv->singleStepMode(false);
+				release_sem(write_board_sem);
+			}
+		}
+		else 
+		{
+			// if the display isn't rotating and we don't have a new 
+			// board to display, give the cpu a break!
+			if(!mv->spinning())
+				snooze(500000);		
+		}
+	}
+
+It's important to note that we release these semaphores in ExitThreads().  If
+we didn't do this, the acquire_sem() in lifeThread() would never return.  Note 
+also that once we acquire the write_board_sem, we make sure that it wasn't
+released from ExitThreads(), by checking the status of QuitPending().
+
+The OpenGL portion of the code is very straightforward.  First, we instantiate
+a class (lifeView) which is derived from BGLView, and pass the BGLView constructor
+the options BGL_RGB | BGL_DEPTH  | BGL_DOUBLE, indicating that we will 
+enable depth testing and double buffering.  Next, in lifeView::AttachToWindow(), we
+prepare the OpenGL state: 
+
+	LockGL();
+
+	// turn on backface culling
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+	
+	glEnable(GL_DEPTH_TEST);
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+
+	glShadeModel(GL_FLAT);
+	glClearColor(0.0,0.0,0.0,0.0);
+	
+	glOrtho(-BOARD_SIZE,BOARD_SIZE,-BOARD_SIZE,BOARD_SIZE,
+			-BOARD_SIZE,BOARD_SIZE);
+	
+	UnlockGL();
+
+Before you call an OpenGL function, you must LockGL(), which assures that only one
+thread at a time will be making OpenGL calls.  As with all locks, this one should be held
+as briefly as possible.
+
+The Display() function actually draws the board.  We clear the view, make several
+glRotatef() calls to get the view we want, translate the board to be centered about
+the origin, and draw the living cells as cubes (in the DrawFrame() function).  Most importantly,
+don't forget to call SwapBuffers()!  Because we've selected double buffering mode all
+of our drawing is done off screen, and we need to call SwapBuffers()  to be able to see
+what we've just drawn.
+
+There's a lot more fun to be had with this code, so we'll return to this project 
+in future articles.  Some of the things we'll be adding include zooming in and out,
+the ability to "grab" the board with the mouse and rotate it, and transparency, so
+we can see through the cubes.  In the meantime, experiment with this code and
+your own OpenGL ideas, and have fun!
+

@@ -1,0 +1,65 @@
+The Tracker is Your Friend
+
+
+When I came abort at Be in January to begin my headlong dive into the guts of NetPositive, I quickly found that one of the most often-requested features was a hierarchical bookmark menu, along with better bookmark management than what was available with PR2 (which was essentially none).  Based on my experience with other browsers and other platforms, my usual response was to stare at my shoes and mumble something about how I should someday implement a bookmark manager à la Netscape or Internet Explorer.  Most people's response was "No, use the Tracker instead.  It's the Be way of doing things."
+
+For the R3 release, at Pavel's prodding, I changed the bookmark data format to use the attribute defined by the x.vnd-Be.bookmark file type for storing the bookmark URL, and I made sure that bookmarks were given this type when saved.  This opened up NetPositive bookmarks for editing in Tracker windows by allowing users to display and edit the URL attribute of bookmarks in the Tracker list view of NetPositive's Bookmarks directory.  In retrospect, I should probably have modified the code to use the Title bookmark attribute as well, instead of relying on the filename for the bookmark's title, as this would have prevented a few weird quirks in bookmark naming.
+
+In my post-R3 work (which you will see in the R4 release of NetPositive, or very likely sooner in an interim release after R3.1), I've extended the relationship between NetPositive and the Tracker for handling bookmarks -- I use NodeMonitors to keep informed of changes to the Bookmarks directory so I can update my Bookmarks menu on-the-fly, and I allow the user to create hierarchies in the Bookmarks menu by creating subdirectories in the Bookmarks directory. 
+
+Having done this work, I'm now a complete convert to the cause of using the Tracker to manage your data.  I've found that the combination of directories of files with custom attributes, Tracker management of those files, and NodeMonitors to keep you up-to-date on changes is a powerful way to manage lists of information with minimal work on your part, while providing users with a lot of power over that data through an interface they're already familiar with.  I'm planning to extend NetPositive in the future to manage site passwords, cookies, and other information in this way, without the need to come up with a new user interface and storage format for each type of information.
+
+So where should you use this sort of mechanism in your applications?  Anywhere you need to have user-maintained lists of information; examples include bookmarks, recent or favorite documents (you could maintain a directory of symlinks to do this), shortcuts, macros, plug-ins, etc.  It's probably best-suited to applications where the list of information is relatively short (i.e. dozens of items); it's not be the best way to maintain a user spelling dictionary.
+
+How is it done?  Follow these steps:
+
+1.  Define a file type with the custom attributes that you need.  For those attributes, set up the information that will make the attributes visible to and editable by the Tracker.  For more information on how to do this, see Doug Fulton's article in Be Newsletter Volume II Issue 11, "How To Get Tracker to See Your Attributes" <http://www.be.com/aboutbe/benewsletter/volume_II/Issue11.html#Workshop>.
+
+2.  Save those files in a directory someplace meaningful to your application.
+
+3.  Set up a Node Monitor for that directory that will catch additions, deletions, and name changes inside the directory.
+
+4.  Since the directory Node Monitor will not receive notifications of attribute changes to files inside the directory, you need to set up a separate Node Monitor for each file in the directory to do this.  Since Node Monitors are a limited system resource, this is a good reason to only use this mechanism for relatively small lists.  Whenever the directory Node Monitor recieves notification for added, deleted, and moved files, add and remove Node Monitors for those files as appropriate.
+
+5.  At program launch, read through the files in the direcotry, slurp out their attributes and store them in a meaningful internal representation.  When you recieve notification from one of the Node Monitors of a change, update your data and take action as appropriate.
+
+6.  When you receive a Node Monitor message, munge the low-level information it gives you into a meaningful format that you can deal with.  This is actually a pretty hard thing to do because the Node Monitor interface is so low-level as to be an extreme pain in the neck.
+
+"So where's some code I can copy and paste?" you ask.  I've written a handy  FolderWatcher class that does most of these tasks for you.  Due to its length (close to 1,000 lines of code), it's not included here, but you can get it from our sample code archives at
+
+<ftp://ftp.be.com/pub/samples/storage_kit/FolderWatcher.zip>
+
+The sample code includes the FolderWatcher class and a simple application that creates some folders in your home directory, adds a few bookmark files to them, and then spits out any messages it gets back from the FolderWatcher.  It's a command-line program and has no GUI, so the application itself isn't very useful, but it should show you how to use the FolderWatcher.
+
+To use this class, create a separate FolderWatcher instantiation for each folder that you wish to watch.  In the constructor, pass in a BEntry to the directory to be observed, the file type of the file of interest, the signature of the preferred application for the files, and the BLooper to be notified when something interesting happens.  If you want, the FolderWatcher can create the folder if it doesn't already exist.
+
+Once the FolderWatcher is created, call Init() on it to kick it off.  It will set up the Node Monitor on the folder, iterate through each matching file in the folder, set a Node Monitor on it, and send your application a FolderWatcher::FileAdded message for it so you can add it to your internal list.  Init() will create a BMessageFilter and will insert it into the BLooper's message loop so that it can spy on the Node Monitor messages that come back and convert them to a friendlier form.  It should behave itself and not eat Node Monitor messages that don't pertain to the folders it's watching.
+
+I've found that for simple cases like I'm assuming here, a BMessage is a good way to represent attribute data, since BMessages can contain the type/name/value triplets that attributes use.  Therefore, I use BMessages for passing attributes back and forth in the FolderWatcher interface.  Note, however, that FolderWatcher will become extremely inefficient if you store large amounts of attribute data in these files.  
+
+To create new files in the folder, you can do it yourself or call FolderWatcher::AddFile(), passing in the filename a BMessage containing the attribute data to be put into the file.  Similarly, to remove a file, you can call RemoveFile, passing the filename; to change a file's attribute, call ChangeFile(), passing the filename and a BMessage.  These functions will cause notification messages to be sent back to inform you of the change, so be ready for it.
+
+If you don't need the folder to be watched anymore, delete the FolderWatcher instance; it will clean up silently (without sending further messages back to you).
+
+All other communication with the FolderWatcher occurs as messages sent back to your BLooper when something happens:
+
+	* FolderWatcher::FileAdded - A new file has been added to the directory, either due to user action in the Tracker, or because your application has added a file.
+		Message data:
+			"Filename" (String) - The name of the file that was added.
+			"FolderWatcher" (Pointer) - The FolderWatcher that is watching this file.
+			"AttrData" (BMessage) - The file's attributes, stored in a BMessage.
+
+	* FolderWatcher::FileRemoved - A new file was removed from the directory, either due to user action or because of your application.
+		Message data:
+			"Filename" (String) - The filename of the file that was removed.
+			"FolderWatcher" (Pointer) - The FolderWatcher that is watching this file.
+
+	* FolderWatcher::FileChanged - An attribute of a file was changed, either due to user action or because of your application.
+		Message data:
+			"Filename" (String) - The filename of the file that was changed.
+			"FolderWatcher" (Pointer) - The FolderWatcher that is watching this file.
+			"AttrData" - The attributes of the file that changed.  Since the Node Monitor doesn't acutally tell you which attribute changed, neither do we; you get all of the attributes in the file.
+
+As it is written, the class doesn't recurse into subdirectories, so that might be a good way to modify it if you want to enhance its capabilities.  (In case you're wondering, this class was written after I implemented hierarchical bookmarks in NetPositive; I'm going to go back and shoehorn in a modified version of this class later.)  Another suggestion would be to modify AddFile() to let it automatically generate a filename for a file if you don't want to do it yourself.
+
+As a final warning, the code hasn't been stringently tested, so caveat emptor.  If you find problems, though, let me know and I'll fix them and update the sample code archive.  Happy coding!

@@ -1,0 +1,227 @@
+Duty Now for the Future
+By Howard Berkey <howard@be.com>
+
+Besides being the name of a great DEVO album, the title
+of this article represents what I'd like to do with my
+space in this week's newsletter. That is, describe some
+of the upcoming features in BeOS networking.
+
+For Genki, the most visible change from a developer's
+standpoint is the new C++ networking API. This was
+shipped in the 4.1 beta CD's Experimental folder,
+and will be a part of the main Genki distribution.
+The entire kit may be accessed by including <NetworkKit.h>
+and linking against libnet.so and libnetapi.so. The
+new API introduces three main classes: BNetEndpoint,
+BNetAddress, and BNetBuffer. These classes simplify
+creating and using network data connections, addresses,
+and data, respectively. Documentation is forthcoming;
+until then, this newsletter article and comments in
+the headers should be enough to get you started.
+
+BNetEndpoint
+
+The BNetEndpoint class abstracts network communication
+endpoints -- think of it as a "socket object."
+BNetEndpoint takes care of all the necessary
+initialization in its constructor; it makes creating
+network connections very simple:
+
+int32 send_data(const char *host, short port, const void *data, int32 datalen)
+{
+	BNetEndpoint comm(SOCK_STREAM);
+	int32 rc = -1;
+
+	if(comm.InitCheck() == B_NO_ERROR)
+	{
+		if(comm.Connect(host, port) == B_NO_ERROR)
+		{
+			rc = comm.Send(data, datalen);
+		}
+	}
+	return rc;
+}
+
+The above code creates a TCP connection to the specified
+hostname and port, sends the data passed in, and
+automatically closes the connection, returning the
+amount of data sent, or -1 on failure. As you can see,
+much of the setup and housekeeping typically required
+when doing network programming is taken care of by the
+BNetEndpoint object.
+
+Many BNetEndpoint member functions map orthogonally to
+the BSD sockets API; it's also possible to get the socket
+descriptor out of a BNetEndpoint for use with the
+standard sockets API. See <NetEndpoint.h> for details.
+
+BNetAddress
+
+Just as you can think of BNetEndpoint as a class that
+encapsulates the BSD sockets API, BNetAddress is a
+class that encapsulates the functionality found in
+<netdb.h>. BNetAddress is a convenient way to store,
+resolve, and manipulate network addresses.
+
+BNetAddress is used to represent network addresses, and
+provide useful access to a network address in a variety
+of formats. BNetAddress provides various ways to get and
+set a network address, converting to or from the chosen
+representation into a generic internal one.
+
+BNetAddress::SetTo is used to set the object to refer
+to the address passed in, which can be specified in a
+variety of formats (omitting InitCheck()ing):
+
+void addrs()
+{
+	BNetAddress addr;
+	struct sockaddr_in sa;
+	in_addr ia;
+
+	addr.SetTo("www.be.com", 80);
+	addr.SetTo("www.be.com", "tcp", "http");
+
+	ia.s_addr = inet_addr("207.126.103.9"); // www.be.com == 207.126.103.9
+	addr.SetTo(ia, 80);
+
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons(80);
+	sa.sin_addr = inet_addr("207.126.103.9");
+	addr.SetTo(sa);
+}
+
+All calls to addr.SetTo in the above example are
+equivalent.
+
+Similarly, BNetAddress::GetAddr() returns the address
+referred to by the BNetAddress object in a variety of
+formats. For example, the following code converts
+sockaddr_in structures into human-readable hostnames:
+
+void sin_convert(const struct sockaddr_in &sa)
+{
+	BNetAddress addr(sa);
+	char host[256];
+	unsigned short port;
+
+	addr.GetAddr(host, port);
+
+	cout << "Host: " << host << "Port: " << port << endl;
+}
+
+
+Likewise, to resolve a host name into a sockaddr_in:
+
+struct sockaddr_in resolve(const char *host)
+{
+	BNetAddress addr(host);
+	struct sockaddr_in sa;
+
+	addr.GetAddr(sa);
+
+	return sa;
+}
+
+As you can see from these examples, BNetAddress has
+a number of constructors that mirror its SetTo member
+functions. BNetAddress also takes care of any byte
+order conversion that's necessary with network addresses.
+
+BNetEndpoint is designed to work closely with BNetAddress;
+any addresses it expects can be represented by a
+BNetAddress, such as in BNetEndpoint::SendTo.
+
+BNetBuffer
+
+Unlike BNetAddress and BNetEndpoint, BNetBuffer has no
+analog in the BSD sockets API. BNetBuffer is a convenient
+way to manage network data that is to be sent across
+the wire, including mundane tasks such as byte order
+conversion. BNetBuffer is a network data container class.
+As I mention in <NetBuffer.h>:
+
+	BNetBuffer is a dynamic buffer useful for storing
+	data to be sent across the network. Data is inserted
+	into and removed from the object using one of the many
+	Append and Remove member functions. Access to the raw
+	stored data is possible. The BNetEndpoint class has a
+	Send and Receive function for use with BNetBuffer.
+	Network byte order conversion is done automatically
+	for all appropriate integral types in the Append and
+	Remove functions for that type.
+
+BNetBuffer is best illustrated by an example. Suppose
+you have a transaction protocol between a network client
+and a server application which specifies that whenever
+the client receives a BMessage, it forwards it to the
+server over the network connection, along with a client
+timestamp and a transaction ID, which is a monotonically
+increasing uint32. It could be coded thusly:
+
+static uint32 gTransID = 0;
+
+[...]
+
+int32 forwardBMessageToServer(const BMessage &msg, BNetEndpoint &serverConn)
+{
+	BNetBuffer packet, sizepack;
+	bigtime_t timestamp;
+	uint32 trans_id, size;
+
+	timestamp = system_time();
+	trans_id = atomic_add(&gTransID, 1);
+
+	packet.AppendUInt32(trans_id);
+	packet.AppendUInt64(timestamp);
+	packet.AppendMessage(msg);
+
+	size = packet.Size();
+	sizepack.AppendUInt32(size);
+
+	serverConn.Send(sizepack);
+	return serverConn.Send(packet);
+}
+
+Voila! Networked BMessages. BNetBuffer does all the
+necessary byte order conversion, so the server simply
+needs to call the matching Remove() member functions
+to get at the data the client was sending.
+
+Archiving
+
+Astute readers of the header files will have noticed by
+now that the C++ Networking API classes are all derived
+from BArchivable. In the case of BNetAddress and BNetBuffer,
+the archived data is just what you would expect; a
+byte-gender-neutral archive of the address info or
+network data, respectively.
+
+For BNetEndpoint, it goes one step further -- network
+connections are archived. For example, if you're
+connected to a host and port when you archive the
+BNetEndpoint object, later instantiation of that
+archive returns a BNetEndpoint that is connected to
+the same host and port.
+
+Debugging
+
+There's also a class called BNetDebug, which provides
+(surprise!) some debugging functionality. Calling
+BNetDebug::Enable(true) turns Net API debugging on;
+you can then call BNetDebug::Dump() with buffers of
+data for a nice hd-like output when you run your program
+from the Terminal. Many BNetEndpoint calls generate
+debugging output when debugging is enabled; play around
+and you'll see what I mean. The debug messages are
+printed to stderr.
+
+Wrapping It Up
+
+This overview should be enough to get you started with
+the new C++ networking API. But what would a newsletter
+article be without some sample code for you to play with?
+Here's the source for a simple FTP client I wrote using
+the new networking API:
+
+ftp://ftp.be.com/pub/samples/network_kit/FtpClient.zip

@@ -1,0 +1,10 @@
+# makefile for all Input Server sample code
+
+SUBMAKES = \
+	input_recorder \
+	nervous
+
+default .DEFAULT :
+	-@for f in $(SUBMAKES); do \
+		$(MAKE) -C $$f $@; \
+	done

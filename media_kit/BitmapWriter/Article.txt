@@ -1,0 +1,39 @@
+Lights... Camera... Render!
+by Chris Tate (ctate@be.com)
+
+Digital images are easy to create.  Putting pixels into memory is a simple and well-understood art.  Writing them to disk in a useful manner is a trifle more complex, but the BeOS provides a number of tools, under the auspices of the Translation Kit, to help manage that complexity.  All in all, putting still images on disk isn't something that causes headaches.
+
+Digital movies are another story.  As with still image files there are a number of different file formats to choose from, but there are the additional choices of compression scheme, whether and how to provide a soundtrack, and so forth -- creating animations means a lot of supporting code, especially if that support is duplicated in a number of different applications.
+
+BeOS R4.5 introduced a couple of new Media Kit classes designed to provide that support to all applications:  BMediaTrack and BMediaFile.  A BMediaTrack represents one coherent stream of data, such as a sequence of images to be played at a particular rate, or a digital soundtrack.  A BMediaFile contains one or more BMediaTracks, and represents the movie as a whole, providing the interface that determines the file format as well as other attributes of the movie file as a whole.
+
+How do these two classes help you create digital movies?  Well, as I mentioned earlier, still images are relatively easy to create.  BMediaTrack provides an interface for putting a sequence of still images together, and BMediaFiles write BMediaTracks out to actual disk files in the proper manner.  The Media Kit provides functions for iterating over the list of all installed media file writers as well as the list of supported codecs for a given media format.  All you need now is a simple way of hooking them all together.
+
+That brings us to this week's sample class -- BitmapMovie.  This class provides a very simple interface for creating a movie file out of a sequence of BBitmaps.  Before I describe it, I should point out that you can find the source code for BitmapWriter at this URL:
+
+    ftp://ftp.be.com/pub/samples/media_kit/BitmapWriter.zip
+
+When you construct a BitmapMovie object, you specify its dimensions and the color space that your BBitmaps will use (generally you will use B_RGB32, since that's the most widely-accepted color space on the BeOS).  You then choose the file format, media format and codec that you wish to use, and call BitmapMovie::CreateFile().  That creates the file on disk according to your specifications.  From there on all you need to do is call BitmapMovie::WriteFrame() repeatedly, passing in the BBitmaps representing successive frames of video, until you're finished.  At that point you call BitmapMovie::CloseFile(), and your movie is safely ensconced on the disk.
+
+The BitmapWriter sample program demonstrates the BitmapMovie class by creating a simple animation and writing it to disk.  The application also demonstrates the mechanism for determining the available file formats and codecs, and presents a user interface for selecting any of the supported combinations.  The code is pretty simple; I'll just go over a few highlights and important points to remember when you write your own code to handle BMediaFiles and BMediaTracks:
+
+* The basic process for creating movie files is this:
+
+    1. Create the BMediaFile object
+    2. Create the BMediaTrack objects that reside in the file
+    3. Optionally adjust the codec's image quality or other settings
+    4. Commit the file's header to disk
+    5. Write data to the tracks
+    6. Close the file
+
+* BMediaFile::CreateTrack() takes the *input* media_format as an argument.  That is, you specify the format of the buffers that you'll be providing to BMediaTrack::WriteFrames(), not the format of encoded data that you want on disk.  The codec argument is what determines the encoding.
+
+* Deleting a BMediaFile also deletes any BMediaTracks associated with that file.
+
+* Don't call BMediaFile::CloseFile() more than once.  Sad to say, there's a bug in at least one media file writer shipped with R4.5 that causes crashes in this case.  Just don't do it.
+
+* Specify the quality of encoding to use before calling BMediaFile::CommitHeader().  In general, codecs can't change quality settings on the fly, and the codec parameters might be part of the file's header information.
+
+* Attaching a BView to a BBitmap lets you use the standard BeOS drawing API to generate the frames of your movie.  This is a great technique for producing offscreen images without having to do the pixel-pushing yourself.
+
+* There is currently no way to determine all of the codecs installed in the system; you can only tell what codecs are available within a given file format and which support a given media format.  For example, if you change the sample code to use a 720x480 movie size, you'll notice that the DV codec is available -- this is because the DV codec only supports that size.

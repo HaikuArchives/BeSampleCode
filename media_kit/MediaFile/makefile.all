@@ -1,0 +1,12 @@
+# makefile for all Media File sample code
+
+SUBDIRS = \
+	easy \
+	mplay \
+	transcode \
+	transcode_r5
+
+default .DEFAULT:
+	-@for f in $(SUBDIRS) ; do \
+		$(MAKE) -C $$f $@; \
+	done

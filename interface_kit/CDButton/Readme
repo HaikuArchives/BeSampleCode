@@ -1,0 +1,36 @@
+Enclosed CDButton sample code is a fully functional CD player controller.
+It is implemented as a replicant, also it may be installed into the Deskbar.
+The code illustrates the following BeOS programming techinques:
+
+	- How to write a replicant
+	- How to place a replicant into the Deskbar
+	- How to control a CD player
+	- How to implement some exotic controls
+
+In addtion to that it uses the following interresting techinques:
+
+	- Using an Observe-Notify mechanism for synchronization
+	- Using function objects with BMessages
+	
+A makefile and CodeWarrior project files for both PPC and Intel platforms are
+provided.
+
+=========================================================================
+
+Notes:
+
+To use the CDButton in the Deskbar type the following in your Terminal:
+
+CDButton -deskbar
+
+You can have CDButton show up in your Deskbar each time you start BeOS by
+including a line like that in UserStartup. You should either move CDButton
+to ~/config/bin or even better create a symbolic link to it from your
+project folder. That way you can hack away at it and have the latest get
+installed each time. Note that as with any replicant based binary, you need
+to make sure that CDButton is properly mimeset and if you have multiple copies
+that it is the preferred one (you can do this either by calling mimeset -f
+on the appropriate binary or by selecting it in the Tracker and using
+Identify). Also, if you make any changes to the binary, they will not get
+propagated to all the active replicant instances until you quit/restart the
+replicant shelf application.

@@ -1,0 +1,396 @@
+What can I do with this entry_ref?
+by Stephen Beaulieu <hippo@be.com>
+
+
+It all started with a very simple idea: to make sure that a given file's attributes are properly
+indexed so that it will appear when I do a query.  You might remember from the Storage Kit
+docs that you can only perform a query on indexed attributes, and furthermore that only files
+whose attributes are written after the index is created will be included in the index.  In other
+words, the BeOS will make sure to add all of the appropriate files to an attribute index whenever
+the attribute is written or modified, but it won't go back through any of your old files and make sure 
+they are in the index.  This is a good thing.  Otherwise any time a new attribute index was created
+every single file on the disk would have to be examined, which would not give you the performance
+you have come to expect from our file system.
+
+As often happens when writing BeOS applications, Indexer has many more features than originally
+intended.  It still rewrites all of the indexed attributes for the files it finds, but in addition
+now gives a fairly close look at the basic operations of the Storage Kit classes.  So, let me start
+at the beginning with that most fundamental pieces of the Storage Kit, the humble entry_ref.
+
+The entry_ref struct is defined in Entry.h, and is fairly straight forward: it contains
+some initialization and comparision functions, and a function to set it's name.  But the real meat is
+the data it contains: a device id (dev_t device), a directory id (ino_t directory), and a name
+(char * name).  The device id specifies which volume the entry exists on, the directory id specifies
+which directory it is supposed to live in, and the name (oddly enough) specifies what the entry should
+be called in that directory.  An entry_ref describes the location of a potential item in the file
+system, but it does not guarantee that an actual file exists there.  It is very similar to a path,
+which specifies the location of a potential file in terms of volume, directory and file names.  In
+fact, throughout the sample code there will be quite a bit of translating between entry_refs and paths
+in the form of a BPath object.
+
+When a reference to a file, directory, symbolic link, or volume enters an application, more often than
+not it comes in the form of an entry_ref.  The Tracker translates files dropped on an application icon
+or window into entry_refs and passes them in a BMessage with a what of B_REFS_RECEIEVED or B_SIMPLE_DATA.
+B_SIMPLE_DATA messages contain some additional information (such as where in the view the message was
+actually dropped), but the heart of the message is the "refs" member.  You can get entry refs out of a
+B_REFS_RECEIVED message as shown in the Indexer::RefsReceived() function:
+
+void 
+Indexer::RefsReceived(BMessage *msg)
+{
+	uint32 		type;
+	int32 		count;
+	entry_ref 	ref;
+	msg->GetInfo("refs", &type, &count);
+	if (type != B_REF_TYPE) return;
+	
+	for (int32 i = --count; i >= 0; i--) {
+		if (msg->FindRef("refs", i, &ref) == B_OK) {
+			EvaluateRef(ref);
+		}
+	}
+}
+
+For each entry_ref pulled out of the message we go to the EvaluateRef() function to start our real work.
+Indexer can also accept arguments from the command line, which is processed in the application's
+ArgvReceived() function.  There we get paths to the entries we are to examine, which we turn into
+entry_refs with the get_ref_for_path() function, and pass on to EvaluateRef().
+
+So, we have now gotten a series of references to potential file system objects we are to reindex.  The
+first thing we need to do is determine exactly what each entry_ref represents (if anything), so that
+we can have our behavior change with each major type.  Let's take a look at EvaluateRef():
+
+status_t 
+Indexer::EvaluateRef(entry_ref &ref)
+{
+	struct stat st;
+	BEntry entry;
+	
+	if (entry.SetTo(&ref, false) != B_OK) return B_ERROR;		
+	
+	if (entry.GetStat(&st) != B_OK) return B_ERROR;
+	
+	
+	if (S_ISLNK(st.st_mode)) {
+		return HandleLink(ref, st);
+	}
+	else if (S_ISREG(st.st_mode)) return HandleFile(ref, st);
+	
+	else if (S_ISDIR(st.st_mode)) {
+		BDirectory dir;
+		if (dir.SetTo(&ref) != B_OK) return B_ERROR;
+		
+		if (dir.IsRootDirectory()) return HandleVolume(ref, st, dir);
+		
+		else return HandleDirectory(ref, st, dir);
+	}
+}
+
+The first thing we do is create a struct stat and a BEntry on the stack.  A stat is a structure
+that contains a bunch of basic information about a file system node, including what type of node
+(directory, symbolic link or file) and creation and modification dates.  Here we want to get a
+struct stat for our entry so that we can determine what it is.  To do so we need a BStatable object
+like a BEntry, which like most StorageKit classes is very easy to create with an entry_ref.  We set
+the BEntry to refer to the entry_ref, and then use that BEntry to get our stat. We specifically want
+to see an entry for exactly the entry_ref specified, so we choose to not resolve any link that it
+may refer to by setting the traverse parameter of BEntry::SetTo() to false.  You'll also notice that
+if either the SetTo() or the GetStat() function fails we simply choose to ignore that ref.  In a real
+application you could choose to post some dialogs alerting your users of the problems, which probably
+have to do with the entry_ref not referring to a real node (either a directory in the path doesn't
+exist, or the entry itself doesn't exist causing the GetStat() call to fail).
+
+Assuming that we get a valid entry and stat, we examine the stat's st_mode field to determine exactly
+what we have.  If we have a link or a file, we immediately proceed to handling them. If we have a
+directory we need to do some further examination to determine if we have a normal directory or one
+that represents a volume (as a volume is mounted as a directory in the root directory).  To do this we
+use our entry_ref to create a BDirectory object (again opting out altogether in case of an error.)  Then
+a call is made to determine if it a root directory.  If it is, we proceed to process the volume, otherwise
+we proces the entry as a directory.
+
+So, why do we care at this point about directories, volumes and symbolic links?  The original goal of
+the program was to reindex files, why not simply ignore anything that isn't a file?  Well, I suppose
+for the sake of sample code I could do just that, but it would not give people the behavior they might
+expect.  For example, I would want the behavior of dropping a directory to be to process all of the files
+contained in that directory.  I might want the same behavior if a volume was dropped (or not as the case
+actually is).  Also, a real application gives you some sort of feedback on user actions.  I started
+to simply put up ugly alerts, but realized that this was a great opportunity to show people how to do a
+little bit more with the file system classes.  Accordingly you will see the following behavior in Indexer:
+For every reference received Indexer will open an information window that gives minute details of whatever
+that refernece represents.  In addition, the contents of all referenced directories will be examined and
+information about the contents will be reported.  This includes the traversing of all sub-directories and
+the reindexing of all files (if appropriate), but does not include the traversal of links (as i wanted to
+avoid any circular paths and unecessary reindexing.)  Finally, any file refernces will be reindexed.
+
+I'll now take a brief look at how I handle each type of entry_ref in order.  I won't go into all of the
+details, as you can see them in the sample code itself. I'll merely point out some of the more interesting
+bits.
+
+Volumes -
+As noted before, I determine that I have a volume referenced when I get a root directory.  The trick is
+to determine exactly what volume the root directory represents.  As there is not a convenient function
+for determining the volume of a directory, my first thoughts were to examine the entry_ref and use the
+device member to get the device number I need to initialize a BVolume.  While this works wonders for
+normal directories, I discovered that the device number specified in the entry_ref for a root directory is
+not the same as the device number for the actual volume it represents.  The root of the file system has
+it's own device id, and that is the number specified in the entry_ref.  So, undaunted I turned to the
+BVolumeRoster class so I could step through each volume in turn and see if it's root directory matched
+my directory.  The resulting code looks like this:
+
+status_t 
+Indexer::HandleVolume(entry_ref &ref, struct stat &st, BDirectory &dir)
+{
+	BVolumeRoster vol_roster;
+	BVolume vol;
+	BDirectory root_dir;
+	dev_t device;
+	
+	while (vol_roster.GetNextVolume(&vol) == B_NO_ERROR) {
+		vol.GetRootDirectory(&root_dir);
+		if (root_dir == dir) break;
+	}
+	
+	// build the info window and the like
+	.....
+}
+
+After discovering the volume I then created an information window that contains all of the gory details
+about the volume.  Essentially I called every information function available in the BVolume class and
+made the results available in the window.
+
+I did look at some other important information about the volume: which attributes were indexed, which
+seemed appropriate since the goal of this application is to reindex files.  Query indexes are device
+dependant; each volume has it's own set of indexed attributes, so showing that volume specific info
+in the vInfoView made sense.
+
+As several of the different classes needed access to the indexed attribute retrieval functions, I went
+ahead and made it a global function.  The function takes a device id and a reference to a BList.  It
+steps through the volume's attribute index directory and adds the name of each indexed attribute to the
+list.
+
+extern status_t 
+get_attribute_indecies(dev_t device, BList &index_list)
+{
+	DIR *index_dir;
+	struct dirent *index_ent;
+	
+	index_dir = fs_open_index_dir(device);
+	if (!index_dir) {
+		return B_ERROR;
+	}
+	
+	while (index_ent = fs_read_index_dir(index_dir)) {
+		char *text = strdup(index_ent->d_name);
+		index_list.AddItem(text);
+	}
+	
+	fs_close_index_dir(index_dir);
+	
+	return B_OK;	
+}
+
+It is important to remember a couple of things about attribute indecies.  First, the only way to access
+the indexing information is through the C interface.  These functions are not available through the C++
+API.  The other important thing to remember is to close the index directory when you are done with it.
+Otherwise it will be impossible to unmount the volume with the open index.
+
+Directories -
+The dInfoView presents a good bit of information about the contents of the directory.  The two operations
+of interest in the class are the TraverseDirectory() and EvaluateRef() functions.
+
+TraverseRef() provides a very generic way to step through all of the items in the directory.
+
+void 
+dInfoView::TraverseDirectory(BDirectory &dir)
+{
+	entry_ref ref;
+	while(dir.GetNextRef(&ref) != B_ENTRY_NOT_FOUND) {
+		EvaluateRef(ref);
+	}	
+}
+
+I had a choice how each entry in my directory was packaged: as an entry_ref, a BEntry or a dirent structure.
+For various reasons I chose the entry_ref.  I could probably have used the GetNextEntry() call just
+as easily and had an EvaluateEntry() call instead.
+
+As it is EvaluateRef() is called for every item found in the directory.  The type of entry is determined
+in the old fashion, and then the entry is dealt with.  Files are indexed, symlinks are noted, and
+sub-directories are traversed.  A count of the various entry types is kept, including invalid entries
+such as root volumes found, nodes that cannot be created, or files that belong to a different drive.
+(Needless to say in general u=invalid files are not found.)  I'll go into amore detail about the reindexing
+procedure when I get to dealing with files, but suffice it to say that the directory keeps track of
+whether a file was not indexed at all, whether all of the appropriate attributes were indexed, or whether
+only some of them were indexed.
+
+void 
+dInfoView::EvaluateEntry(entry_ref &ref)
+{
+	struct stat st;
+	BEntry entry;
+	
+	if (entry.SetTo(&ref, false) != B_OK) return;		
+	
+	fEntryCount++;
+	
+	entry.GetStat(&st);
+	
+	if (S_ISLNK(st.st_mode)) {
+		fLinkCount++;
+	}
+	else if (S_ISREG(st.st_mode)) {
+		if (ref.device != fRef.device) {
+			fInvalidCount++; return;
+		}
+		
+		fFileCount++;
+		
+		BNode node;
+		if (node.SetTo(&ref) != B_NO_ERROR) {
+			fInvalidCount++; return;
+		}
+		
+		status_t status = B_OK;
+		status = reindex_node(node, *fIndexList);
+	
+		
+		if (status == INDEXED) fIndexed++;
+		else if (status == PARTIAL_INDEXED) fPartialIndexed++;
+		else fNotIndexed++;		
+	}
+	
+	else if (S_ISDIR(st.st_mode)) {
+		BDirectory dir;
+		if (dir.SetTo(&ref) != B_OK) {
+			fInvalidCount++;
+			return;
+		}
+		if (dir.IsRootDirectory()) fInvalidCount++;
+		
+		else {
+			fSubDirCount++;
+			TraverseDirectory(dir);
+		}
+	}
+}
+
+
+Symbolic Links -
+Symbolic links are about the easiest to deal with of the various types found.  Basically the BSymLink
+class contains one important piece of information, the relative or absolute path to the linked to entry.
+As mentioned in the BeBook, the one interesting function is ReadLink(), which allows you to retrieve the
+path to the linked entry.  As a bit of a cautionary note, I would advise setting BSymLinks with a path,
+rather than an entry_ref.  The upcoming Intel release shipped with a obscure bug where a BSymLink is
+not properly intialized via an entry_ref.  Be assured that this bug will be tracked down and quashed.
+It should also be noted that dragging a link from the tracker to the Indexer icon will cause the entry_ref
+delivered to the app to be the linked to ref, and not the ref for the link itself.  A link dragged
+to a window or specified in the command-line arguments will properly create a lInfoView.
+
+Files -
+Now we come to the heart of the original program.  We have a reference to a file, so let's reindex it's
+attributes.  The first step in this process is to get the list of indexed attributes for the file's
+device, which has been described above.  Then the entry_ref is used to create a BNode, which knows how
+to access the node's attribute information.  This function is also set aside as a global so that both
+the dInfoView and the fInfoView have access.  The reindex_node function takes a BNode reference and a
+reference to a BList of the device's indexed attributes.
+
+extern status_t 
+reindex_node(BNode &node, BList &index_list)
+{
+	
+	attr_info info;
+	status_t status = B_OK;
+
+	int32 to_be_indexed = 0;
+	int32 indexed = 0;
+	int32 not_indexed = 0;
+	
+	
+	//rewrite all of the appropriate attributes
+	for (int32 i = 0; i < index_list.CountItems(); i++) {
+		char *attr = (char *) index_list.ItemAt(i);
+		
+		if (node.GetAttrInfo(attr, &info) == B_OK) {
+			to_be_indexed++;
+			
+			
+			switch(info.type) {
+				case B_MIME_STRING_TYPE:
+				case B_STRING_TYPE:
+				case B_MIME_TYPE:
+				case B_ASCII_TYPE:
+					{
+						char *value = (char *) malloc(info.size);
+						if (node.ReadAttr(attr, B_STRING_TYPE, 0, value, info.size) > 0) {
+							if (node.WriteAttr(attr, B_STRING_TYPE, 0, value, info.size) > 0)
+								indexed++;
+							else not_indexed++;
+						} else not_indexed++;
+					}
+					break;
+ 				
+				... //more cases here
+				
+				default:
+					not_indexed++;
+			}
+		}	
+	}
+
+
+	if (to_be_indexed > 0) {
+		
+		if (indexed > 0) {
+			if (not_indexed > 0) return PARTIAL_INDEXED;
+			else return INDEXED;
+			
+		} else return NOT_INDEXED;
+		
+	} else return NOT_INDEXED;
+}
+
+In this function the list of indexed attributes is stepped through and GetAttrInfo() is called to see
+if the node has an attribute of that name.  The information about that attribute is used to set up an
+appropriate buffer for the current attribute value. ReadAttr() is used to read the value into the
+buffer, and if successful, the same value is written back with WriteAttr().  Simply rewriting the same
+value will cause it to get recorded in the index if it is not already there.  Every attribute in te list
+is examined, and if present rewritten.  A count of all of the indexed attributes associated with the file
+is kept, as well as counts specifying whether those attributes were successfully indexed or not.  The
+function returns whether the node was partially, completely or not indexed.
+
+In addition, the fInfoView contains a list of all of the attributes belonging to the file.  This is
+accomplished with the simple GetAttributes() function:
+
+void 
+fInfoView::GetAttributes(BNode &node, BList &list)
+{
+	char attr_buf[B_ATTR_NAME_LENGTH];
+	
+	node.RewindAttrs();
+	
+	while (node.GetNextAttrName(attr_buf) == B_NO_ERROR) {
+		char *string = strdup(attr_buf);
+		list.AddItem(string);
+	}
+}
+
+This simply steps through all of the node's attributes and add's their names to a list, which is displayed
+in the window.
+
+There are some other details common to every InfoView class.  The stat information is used to
+display the creation and modification times of the nodes.  As mentioned is passing above, each of the
+info windows passes on dropped B_SIMPLE_DATA messages to the application, making it much easier
+to play around with Indexer.  Also, the strings in each view are done with DrawString() in a single view,
+rather than having a series of BStringViews.  This has the added complication of requiring all sorts of
+calculations and window resizing, but it was a straight forward, low overhead way to do this.  This is
+certainly not the 'officially recommended' method for doing this sort of interface work.  It was just the
+way I happened to implement things.  Suffice it to say you will get much more out of the Storage Kit
+portions of the sample code than the Interface Kit.
+
+Finally, be sure to try out some interesting paths from the command line.  You can get information about
+virtual volumes like /dev, /pipe, and /.  It's fun to play around with.  Also, you can be assured that
+Indexer has not reached it's final form.  I'll be updating it as time allows to be a little more
+intelligent and a little more useful, with an eye towards actually creating and removing indexes.
+
+For the meantime, Indexer can be found at < insert link here >.
+
+I'll be back next week with Victor Tsou from the Doc Team.  We'll be filling you in on many of the things
+you'll want to know about the upcoming R3 release of the BeOS for Intel.  Until then...

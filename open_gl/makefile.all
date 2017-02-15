@@ -1,0 +1,12 @@
+# makefile for all OpenGL sample code
+
+LEAFDIRS = \
+	3Dlife \
+	3Dlife-Voodoo \
+	GLTeapot \
+	GLTeapot-Voodoo
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

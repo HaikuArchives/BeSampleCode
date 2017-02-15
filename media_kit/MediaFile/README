@@ -1,0 +1,13 @@
+This directory contains several sample programs
+that use the BMediaFile and BMediaTrack API's.
+
+The programs are:
+
+	• easy - a simple example showing how to 
+			  process all the video and audio frames
+			  in a media file.
+
+	• mplay - a very simple media player program
+
+	• transcode - a command line program that will
+				     convert from one file format to another.

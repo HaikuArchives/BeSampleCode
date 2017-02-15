@@ -1,0 +1,182 @@
+Getting into (B)Shape
+===================
+Long-time reader and BeOS fanatic Tim Dolan recently
+wrote to me regarding the new BShape and BShapeIterator
+classes. "From the header file, I can see that
+the BShape class is just what I need to draw smooth
+curves," Tim wrote. "But I need help getting started.
+Can you provide some no-frills sample code which covers
+the basics?" Here you go, Tim:
+
+<ftp://ftp.be.com/pub/samples/interface_kit/iterview.zip>
+
+This sample code shows how to get the outline of a text
+string  as a BShape and manipulate the control points
+of the BShape through BShapeIterator, in order to
+distort the text.
+
+Before you dig into the sample code, take a minute to
+examine the Shape.h header file. The BShape class has four
+central functions, which are used to describe a curve or
+path:
+
+* MoveTo() moves to the specified point.
+* LineTo() creates a line between the current point and
+  the specified point.
+* BezierTo() describes a cubic Bezier curve which starts at
+  the current point and ends at the third point specified.
+* Close() creates a line between the current point and the
+  first point of the BShape.
+
+The BShapeIterator class has four corresponding functions:
+IterateMoveTo(), IterateLineTo(), IterateBezierTo(), and
+IterateClose(). An additional function, Iterate(), binds
+them all together by stepping through each point of the
+given BShape, calling the appropriate Iterate...To()
+function, and passing it a pointer to the BPoint or BPoints
+which describe that segment of the path. For this to be
+useful, you need to derive a class from the BShapeIterator,
+replacing the Iterate...To() functions with functions that
+do something interesting, such as displaying the BPoints or
+relocating them.
+
+In the sample code, we start by creating the IterView class,
+which inherits from both the BShapeIterator class and the
+BView class. We'll override the Iterate...To() functions and
+have each one draw the control points in the view. We'll also
+keep lists of the control points (one list for each of the
+glyphs in the text string), which will allow the MouseDown()
+and MouseMoved() functions to manipulate the BShape.
+
+We start by obtaining the outlines for the glyphs of our text
+in the InitializeShapes() routine:
+
+void
+IterView::InitializeShapes()
+{
+	BFont font;
+	GetFont(&font);
+	font.SetSize(fontSize);
+
+	delta.nonspace = 0.0;
+	delta.space = 0;
+
+	font.GetGlyphShapes(text, textlen, shapes);
+	font.GetEscapements(text, textlen, &delta, esc, esc+textlen);
+
+}
+
+We also get the escapement values for the text, which (when
+multiplied by the font size) lets us determine the placement
+of each glyph. This is important, as the coordinates of each
+glyph shape are in absolute terms, not relative to one another.
+
+The Draw() function is the heart of the matter, as it calls
+the Iterate() function of the BShapeIterator class. Each time
+through the loop, the offset point is adjusted to determine
+the starting point of the glyph shape:
+
+void
+IterView::Draw(BRect R)
+{
+	BPoint where(initialPoint);
+
+	for (int32 i=0, curShape=0; i<textlen; i++, curShape++)
+	{
+		offset.Set(floor(where.x+esc[i+textlen].x+0.5),
+				  floor(where.y+esc[i+textlen].y+0.5)-1.0);
+
+		MovePenTo(offset);
+		SetHighColor(0,0,0);
+		SetPenSize(2);
+		StrokeShape(shapes[i]);
+		SetPenSize(1);
+
+		Iterate(shapes[i]);
+
+		where.x += esc[i].x * fontSize;
+		where.y += esc[i].y * fontSize;
+	};
+
+	if(firstPass) firstPass = false;
+}
+
+For simplicity's sake, we're drawing directly to the view,
+rather than off-screen. This results in flicker when dragging
+a control point, and is certainly the first thing you'll want
+to take care of in a real application.
+
+The first time you call the Iterate() function, the firstPass
+flag is true, and each Iterate...To() function adds the point
+or points and the offset to a BList of glyphPts associated
+with that BShape. For example:
+
+status_t
+IterView::IterateLineTo(int32 lineCount, BPoint *linePts)
+{
+	SetHighColor(255,0,0);
+	for(int i=0; i < lineCount; i++, linePts++)
+	{
+		FillEllipse(*linePts+offset, 2, 2);
+		if(firstPass)
+		{
+			shapePts[curShape].AddItem(new glyphPt(linePts,
+offset));
+		}
+	}
+
+	currentPoint = *(linePts-1)+offset;
+	return B_OK;
+}
+
+Note that each Iterate...To() function also sets the
+currentPoint, which is the last point of the BShape
+that was drawn.
+
+The IterateBezierTo() function needs a little explanation
+regarding its control points. BShape uses cubic Bezier
+curves, which means that the curve is described by four
+control points; but note that BezierTo() and IterateBezierTo()
+are given BPoints in groups of three, not four. The first
+control point is the point of the BShape immediately
+preceding the BezierTo() call; this point is not explicitly
+passed into BezierTo() or IterateBezierTo(). The last control
+point is the endpoint of the curve. The two intermediate
+control points determine the shape and amplitude of the curve
+between the first and fourth control points.
+
+The MouseDown() function starts by determining if the mouse
+down point falls inside the bounding box of a BShape. If it
+does, it then searches the list of glyphPts associated with
+that BShape to determine if the mouse point is within a
+small distance of one of the control points. During this
+search, we need to take into account the offset of our
+BShape. If a point is found, we set the isTracking flag to
+true, and set dragPoint to the selected control point.
+
+If isTracking is true and we enter the MouseMoved() function,
+we change the position of the chosen control point (once again
+taking into account the offset) and Invalidate the view:
+
+void
+IterView::MouseMoved(BPoint pt, uint32 code, const BMessage *msg)
+{
+	if(isTracking == false) return;
+	
+	*(dragPoint->pt) = (pt - dragPoint->offset);
+	Invalidate();	
+}
+
+There are many interesting things you can do with BShapes
+and BShapeIterators. Most obviously, they make excellent
+drawing primitives, which let you accurately and flexibly
+describe complex curves. You can create wonderful effects or
+even animations by applying various transformations to the
+BShape, especially for text. You can also clip to BShapes: just
+create a BPicture for your BShape, display an interesting
+pattern or bitmap, call BView::ClipToPicture(), and you've got
+an amazing effect for just a few lines of code.
+
+Now that you've seen the possibilities, make it your New Year's
+resolution to get into BShape!
+

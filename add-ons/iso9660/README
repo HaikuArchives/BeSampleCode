@@ -1,0 +1,20 @@
+To set things up to create a filesystem:
+
+* the files fsproto.h, lock.h, and cache.h are private
+  headers and will change in the future.  they are here
+  only so you can develop file systems now. 
+
+* if you intend to use the IDE for your development you
+  will need to delete the sym link _KERNEL_ and instead
+  copy /boot/beos/system/kernel_mac into this directory
+  and call it _KERNEL_  (this is because the IDE can't 
+  deal with a symlink to a kernel but the command line
+  tools can).
+
+* modify kernel_interface.c to suit your filesystem
+
+* run the makefile.  it puts a copy of the file system
+  into ~/config/add-ons/kernel/file_systems.  Then you
+  have to mount your file system using the mount tool
+  in the shell (with the "-t fstype" argument to specify
+  your file system).

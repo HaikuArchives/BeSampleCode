@@ -1,0 +1,41 @@
+VoteOften Read Me
+
+As mentioned in my newsletter article, VoteOften is an application that
+sends HTTP requests to a single specified server with multiple threads.
+It is intended solely as an instructional application detailing how to
+manage a multithreaded BeOS networking application.
+
+You will probably want to know how to get the application working.
+You can start the application from either the command-line or by
+double-clicking.  By default, there are no voting threads created.
+There is also no GUI interface for creating additional threads.  This is
+left as an exercise to the user.
+
+So, how do you manage the number of voters?  Thorough the command-line and
+BApplication's ArgvReceived() function.  Here is the syntax:
+
+=NUMBER - sets the number of voters to NUMBER
++NUMBER - adds NUMBER of voters
+-NUMBER - removes NUMBER of voters
+
+There is a hard-coded maximum number of voters (set at 10 right now). You will not
+be able to add more than that number of voters.  Also, as the application in single
+launch, you can use other Terminals to change the number of voters.
+
+To change whether the voters are voting or not, you can either use the
+button in the interface (labelled either 'Stuff the Ballot!' or 'Cease And Desist!',
+or you can use command-line argunents:
+
+CEASE - will stop the voting if it is going
+STUFF - will start the voting if it is stopped
+
+Finally, one last note.  The interface leaves a lot to be desired.  As noted earlier,
+there is no way to change the number of voters, or to set the targets.  There is also
+one thing that you may not notice immediately: the current vote count is simply
+the number of votes that the current set of voters have cast (in fact it is implemented
+by simply asking the voters what they have done.)  This means that when a voter gets
+arrested, the vote count will be decremented by the number of votes that voter has
+cast.  If you want a running tally of total votes, you will have to implement it
+yourself.
+
+stephen beaulieu <hippo@be.com>

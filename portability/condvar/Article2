@@ -1,0 +1,144 @@
+DEVELOPER WORKSHOP:  Condition Variables, Part 2
+by Christopher Tate (ctate@be.com)
+
+Last week I presented a condition variable (or "CV") implemention for BeOS.  If you've had a chance to look over the code, you may have thought it rather convoluted.  I'll agree with you there, but the complexity is not without reason.  CVs are low-level atomic scheduling primitives, and expressing them in terms of a different primitive, the semaphore, is decidedly nontrivial.  The complexity is increased by the restriction that the CV operations be implemented as a set of user-level functions, with no changes to the kernel.  In this article I'll explain why the CV implementation is so involved, by illustrating a bit of the design process that went into its creation.
+
+First things first:  the source is available on the Be FTP site at this URL:
+
+   <ftp://ftp.be.com/pub/samples/portability/condvar.zip>
+
+Fundamentally, CVs have two operations, waiting and signalling.  Waiting is a blocking operation, and in BeOS the only blocking primitive is the semaphore, so a CV "wait" will need to be implemented as a semaphore acquisition.  That, in turn, dictates that the "signal" operation be a semaphore release.  Add to this the standard behavior that waiting on a CV unlocks then relocks an external mutex and we see that these two operations will look something like this (in pseudo-C):
+
+cond_wait(condvar_t* cv, mutex_t* mutex)
+{
+   unlock(mutex);
+   acquire_sem(cv->semaphore);
+   lock(mutex);
+}
+
+cond_signal(condvar_t* cv)
+{
+   release_sem(cv->semaphore);
+}
+
+Ideally, this would be a sufficient implementation.  Unfortunately, there are a couple of problems.  First, signalling releases the underlying semaphore even when there are no waiters.  This means that threads attempting to wait later on will experience immediate, spurious wakeups until they exhaust the semaphore's accumulated "extra" signals.  This is unfortunate, but it's technically allowed by the POSIX condition variable standard:  spurious wakeups are deemed an acceptable price for efficient CVs.
+
+There's a worse problem, however:  the mutex unlock and semaphore acquisition are not atomic.  The waiting thread could be rescheduled between those two operations, and this can lead to incorrect behavior in some situations.  Here's one example:  imagine two threads running the following loops endlessly:
+
+mutex_t* mutex = MUTEX_INITIALIZER;
+condvar_t* cv = COND_INITIALIZER;
+volatile int mode = 0;
+
+thread A:
+{
+   lock(mutex);
+   for ( ; ; mode = 0, cond_signal(cv) )
+   {
+      while (mode == 0) {
+         cond_wait(cv, mutex);   // line A
+      }
+   }
+}
+
+thread B:
+while (true) {
+   lock(mutex);                  // line B
+   if (mode == 0) { 
+      mode = 1; 
+      cond_signal(cv);           // line C
+   } 
+   while (mode != 0) { 
+      cond_wait(cv, mutex);      // line D
+   } 
+   mutex_unlock(mutex);
+}
+
+These two threads ping-pong back and forth, using the CV as a signal to do so.  Now, imagine that thread A is calling cond_wait() in line "A".  The mutex is unlocked inside the cond_wait() implementation, but let's assume that thread A is preempted after the unlock but before it acquires the semaphore, and thread B begins running.  Thread B acquires the now-available lock in line "B", sees that mode == 0, sets mode = 1, and calls cond_signal() in line "C".  This releases the cv semaphore, making it available.  Thread B then proceeds to call cond_wait() in line "D", which releases the lock and acquires the underlying semaphore -- successfully!  This is a spurious wakeup, which is allowed, so thread B has to re-test the condition that it's waiting on.  "mode" is still non-zero, so thread B repeats the call to cond_wait() at line "D", this time blocking on the cv semaphore.  Now thread A finally gets another chance to run, picking up where it left off in the middle of the cond_wait() implementation:  it also attempts to acquire the CV's semaphore, and blocks.  Deadlock:  both threads are blocked on the same semaphore.
+
+This isn't just a contrived example.  This exact deadlock occurred in real code -- known to work properly on other platforms -- when the developers used a BeOS condition variable implementation that turned out to be overly simplistic.
+
+So we need a mechanism to make the unlock-and-block *look* atomic.  More precisely, we need to prevent a signal-then-wait sequence from racing ahead of some other thread which has begun the wait process but not yet blocked on the CV's semaphore.  To accomplish this, we'll need some mechanism that forces signallers to defer to waiters, even if the waiters haven't yet blocked on the semaphore.  The mechanism I chose was to use an additional semaphore for "handshaking."  The signaller waits for the in-progress waiter by blocking on the handshake semaphore, which the waiter releases upon awakening, i.e. receiving the signal.
+
+This introduces a new complexity, however:  the signaller has to know, when releasing the main semaphore, whether or not there's a waiter to answer the handshake.  Testing the CV semaphore's count isn't sufficient; recall that the very problem we're trying to solve involves a waiter that hasn't yet acquired that semaphore.  So, we need some more bookkeeping:  the waiting thread has to inform the signaller, somehow, of its presence.
+
+To accomplish this, and properly account for the cases when multiple threads are trying to wait simultaneously, we add a count to the condvar_t structure, called "nw" for "number of waiters."  Threads increment the count in cond_wait(), before they unlock the mutex, then decrement it again once they awaken, after they handshake with their signaller.  The signaller uses this count to determine whether a handshake is necessary.  Of course, the count manipulations need to be atomic, otherwise simultaneous waiters will corrupt the count.
+
+The implementation now looks like this:
+
+cond_wait(condvar_t* cv, mutex_t* mutex)
+{
+   atomic_add(&cv->nw, 1);
+   unlock(mutex);
+   acquire_sem(cv->semaphore);   // line E
+   atomic_add(&cv->nw, -1);      // line F
+   release_sem(cv->handshake);
+   lock(mutex);
+}
+
+cond_signal(condvar_t* cv)
+{
+   int count = cv->nw;
+   if (count > 0)
+   {
+      release_sem(cv->semaphore);
+      acquire_sem(cv->handshake);   // defer to waiter
+   }
+}
+
+This is better in two ways.  First, it avoids the race condition that we illustrated above; the signaller defers to the awakened thread for a handshake, at which point both the wait and the signal have "completed," and the CV is back to a neutral state.  Second, this new implementation doesn't release the primary semaphore unless there's actually a waiter present, which avoids the spurious wakeups of the initial approach.
+
+Unfortunately, this implementation is still insufficient.  There is still a dangerous race condition:  calls to cond_signal() might occur between lines "E" and "F" above; that is, after the waiter awakens but before the count is adjusted.  These post-wakeup cond_signal() invocations would still see the waiter count as non-zero, so they would still release the main semaphore and try to handshake with the (nonexistent) waiter, and hang in cond_signal().
+
+There's also a situation that arises because cond_signal() is not really the only way that a waiter can be awakened.  It's possible that some other thread posted an interrupt to the waiting thread via kill() or a similar function; that would interrupt the waiter's attempt to acquire the main semaphore.  We'd like to behave properly in such a case, with the cond_wait() returning B_INTERRUPTED but without attempting to handshake with a signaller.  Similarly, the POSIX standard also mandates a function called cond_timedwait(), which allows a thread to wait until a specified absolute time for the CV to be signalled, at which point the wait times out and returns a suitable error code.  In both of these cases, the awakened thread must be able to discern whether there are any signallers with which to handshake.
+
+The multiple-signaller race issue is addressed by adding another lock to the condvar_t structure in order to serialize the cond_signal() operation, forcing the racing signallers to wait patiently for ongoing signal-and-handshake sequences to complete.  The aborted-wait issue, in turn, requires that waiters have some knowledge of whether there are signallers in progress in order to handshake when expected to.  This is accomplished by adding a signals-in-progress count to the condvar_t structure.  We'll call the new lock "signalLock," and the new count "ns" for "number of signals."  Here's the final implementation:
+
+cond_wait(condvar_t* condvar, mutex_t* mutex)
+{
+   status_t err;
+
+   lock(condvar->signalLock);
+   condvar->nw += 1;
+   release_sem(condvar->signalLock);
+
+   unlock(mutex);
+   err = acquire_sem(condvar->semaphore);
+
+   lock(condvar->signalLock);
+   if (condvar->ns > 0)
+   {
+      release_sem(condvar->handshakeSem);
+      condvar->ns -= 1;
+   }
+   condvar->nw -= 1;
+   unlock(condvar->signalLock);
+
+   lock(mutex);
+   return err;
+}
+
+cond_signal(condvar_t* condvar)
+{
+   status_t err = B_OK;
+
+   lock(condvar->signalLock);
+
+   if (condvar->nw > condvar->ns)
+   {
+      condvar->ns += 1;
+      release_sem(condvar->semaphore);
+      unlock(condvar->signalLock);
+      acquire_sem(condvar->handshakeSem);
+   }
+   else   // no waiters, so the signal is a no-op
+   {
+      unlock(condvar->signalLock);
+   }
+   return err;
+}
+
+Because a wait can be interrupted at any instant, including while a signaller believes itself to be waking up the waiting thread, sometimes handshakes are necessary even when threads time out.  This implies that the decision to handshake should be based solely on the signal count, not on whether the wait timed out.
+
+Access to both the signal and waiter counts is serialized through the signalLock because both waiters and signallers use those counts to decide whether to handshake.  Conceptually, that lock allows only one thread to formally enter a waiting or signalling state at a time, preventing the races described earlier in this article.  Because the lock provides serialization, atomic arithmetic is unnecessary.
+
+The source code for the condition variable implementation is slightly more complete than I've presented here; it deals with interrupts coherently, and handles the CV "broadcast" and "timedwait" operations.  The code is commented so that you can tell what it's doing; those two operations are simple generalizations of the basic "signal" and "wait" cases.  The biggest drawback to this implementation is its overhead:  it requires an extra pair of context switches per awakened waiter, plus it imposes fairly strict serialization on nearly-simultaneous signal and wait operations.  This is unfortunate, but it's the price we pay for having a correct CV implementation that does not rely on any kernel support other than sempahores.

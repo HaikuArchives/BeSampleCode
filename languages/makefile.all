@@ -1,0 +1,9 @@
+# makefile for all languages sample code
+
+LEAFDIRS = \
+	ObjectOrientedC
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

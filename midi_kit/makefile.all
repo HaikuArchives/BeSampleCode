@@ -1,0 +1,10 @@
+# makefile for all MIDI Kit sample code
+
+LEAFDIRS = \
+	PatchBay \
+	Transposer
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

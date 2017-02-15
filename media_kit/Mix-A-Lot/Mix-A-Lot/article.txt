@@ -1,0 +1,222 @@
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+DEVELOPERS' WORKSHOP: Media Kit Basics: Build Your Own Mixer
+  For Fun And Profit!
+By Owen Smith -- <orpheus@be.com>
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+I heard a rapidly approaching Canyonero, the deadliest of
+sport utility vehicles, in the parking lot yesterday, and
+once again recognized the sound of doom. And sad to say, I
+was a convenient target for it.
+
+"You know, those audio sample apps you're coming up with are
+pretty lame," spat Morgan le Be, BeOS hacker and mistress of
+the black arts, bringing her smoking 'Ero to a halt against
+the red curb. "Who plays only one sound at a time these
+days?"
+
+"Well, you can hook up your sounds to the system mixer..."
+
+"Uh-uh, buster -- I want a mixer, just like the system
+mixer, but for my own private use."
+
+The gauntlet was down, and for the first time, I knew
+how to parry Ms. le Be's attack. Just a few minutes'
+explanation, and she was satisfied.
+
+And so I say to you, O, True Believers: Heed the dark
+magick of the Media Kit. Somewhere in the bowels of the
+Media Add-On Server dwells a dormant mixer node, as
+awesome in its slumber as a hibernating polar bear,
+waiting for you to harness its power.
+
+Me and Sir Mix-A-Lot
+
+This week's sample code shows how you, too, can build a
+mixer. It's fast, easy, and KitchenAid approved. However,
+please note that the mixer add-on will not support this
+until R4.1, though the techniques I demonstrate are
+indispensable to any application that has to deal with
+media add-ons. Your URL for today is
+
+<ftp://ftp.be.com/pub/samples/media_kit/MixALot.zip>
+
+Mix-A-Lot is a simple app that borrows the sound playback
+mechanism from SoundCapture to play your super-phat grooves.
+Unlike SoundCapture, this one constantly loops your
+favorite sounds and allows you to mix up to four sounds
+simultaneously.
+
+How do you use it? Simple: fire it up and drag a sound file
+from the Tracker into one of the icon docks at the top of
+the Mix-A-Lot window. The sound will start promptly, and
+continue to play in a loop until you drag it off the dock.
+A new sound dragged onto an already occupied dock replaces
+the old sound.
+
+The classes MixerManager and Channel do most of the
+important work in this app. MixerManager is responsible for
+instantiating the mixer and hooking it up. Channel
+represents an input connection to the mixer, and is
+responsible for instantiating input sources and connecting
+them to the mixer.
+
+You'll also notice the standard set of mixer controls in
+the Mix-A-Lot window. If you paid attention during last
+week's Workshop, you'll already have a good idea where
+those controls come from. If not, revisit Mr. Tate, and
+be enlightened:
+
+<http://www.be.com/aboutbe/benewsletter/volume_III/
+Issue9.html#Workshop>
+
+Adding It On
+
+The magic behind this mixer madness is the Media Roster's
+ability to instantiate media add-ons for you. Media add-ons
+are code modules that can provide media services to any
+BeOS application. You can find them in two locations:
+/boot/beos/system/add-ons/media/ and
+/boot/home/config/add-ons/media/.
+
+Here are some facts about Media Add-Ons:
+
+* Media add-ons load dynamically; like any BeOS add-on,
+  they're loaded when they are needed. The application doing
+  the loading in this case is an important part of the BeOS
+  media system, called -- appropriately enough -- the Media
+  Add-On Server.
+
+* Media add-ons know how to instantiate media nodes, and
+  support an interface to do so when the Media Add-On
+  Server demands it.
+
+* Media add-ons support an interface that tells the Media
+  Add-On Server what kinds of media nodes they can
+  instantiate. Many media add-ons deal with only one kind
+  of node  -- for example, the BeOS mixer add-on only
+  supports the mixer node. However, a media add-on can
+  support as many different kinds of media nodes as it
+  wishes. For example, you might want to write a codec
+  add-on that contains both an encoder and a decoder node
+  for a particular format.
+
+Media add-ons generally have one purpose: to instantiate
+media nodes that any application can use, without the
+application having to know any of the messy details of the
+node's implementation. For this reason, media add-ons are
+generally self-contained. For instance, there is a Video
+Window node coming in R4.1 that, when it's instantiated,
+creates its own window and view to display the video that
+it receives. All you need to do to take advantage of this
+node is hook it up to an appropriate video source -- the
+Video Window takes care of the rest.
+
+Mixing It Up
+
+As I hinted at above, the BeOS system mixer node is provided
+by none other than the Mixer Media Add-On. But there's
+nothing to stop you from getting access to the mixer add-on
+as well and instantiating your own mixer. That's exactly
+what Mix-A-Lot does.
+
+To find the system mixer, you need to know what kinds of
+media nodes are at your disposal. This information is
+provided by objects called dormant media nodes. You can
+query the Media Roster to get a list of dormant nodes
+that are available to the system and specify any of the
+following criteria for your query:
+
+* whether it supports a particular media format in its
+  outputs or inputs;
+
+* whether it matches a particular name;
+
+* whether it matches a particular node kind.
+
+The last criterion is the one we'll use. The "node kind" is
+a set of flags that a media node uses to inform the Media
+Roster about its particular characteristics. There are
+several predefined kinds that help to categorize the nodes
+you'll encounter -- for example, a node whose kind includes
+B_TIME_SOURCE derives from BTimeSource, and a node whose
+kind includes B_PHYSICAL_OUTPUT represents a physical output
+of your system, like audio output. Conveniently enough,
+there is also a type defined for the mixer node:
+B_SYSTEM_MIXER. (The kind of this particular node is
+somewhat misleading, because it applies to any instance of
+the audio mixer node, not just the system mixer that you
+access via the Audio preference panel.)
+
+Once we know the kind we're looking for, finding the mixer
+node is trivial, especially since there's exactly one add-on
+right now that fits our criterion. BMediaRoster::GetDormant
+Nodes() is the function that does the work for us. It
+returns a list of information about each dormant node it
+finds; this information is encapsulated in a structure
+called dormant_node_info.
+
+status_t err;
+dormant_node_info mixer_dormant_info;
+int32 mixer_count = 1;
+err = BMediaRoster::Roster()->GetDormantNodes(
+    &mixer_dormant_info, &mixer_count, 0, 0, 0,
+    B_SYSTEM_MIXER, 0);
+
+What do we do with this dormant_node_info? Well, we can use
+it to get more information about the dormant node (called
+the flavor_info), or we can use it to create an instance of
+that particular dormant node. We'll do the latter through
+the function BMediaRoster::InstantiateDormantNode(), which
+takes a dormant_node_info and gives us the media_node that's
+been instantiated:
+
+media_node mixer_node;
+if (err == B_OK) {
+    err = BMediaRoster::Roster()->InstantiateDormantNode(
+        mixer_dormant_info, &mixer_node);
+}
+
+Screaming in Digital
+
+The only thing you need to know from here is how to hook the
+mixer up.
+
+The mixer node supports an arbitrary number of inputs --
+this means that you can always get as many free inputs for
+the mixer as you want, via BMediaRoster::GetFreeInputsFor().
+Here's what you should know about mixer inputs:
+
+* Each input's media format must be B_MEDIA_RAW_AUDIO.
+
+* Each input must be 1 or 2 channels.
+
+* For best performance results, leave each input's buffer
+  size and byte order unspecified; the mixer will set them
+  to their optimal values.
+
+The mixer node supports exactly one output, which provides
+-- surprise! -- the audio mix. For the system mixer, this
+output is usually plugged straight into the audio output
+node. For Mix-A-Lot, we take the output of our audio mixer
+and plug it into the system mixer. The salient features of
+the mixer output are these:
+
+* The output's media format is B_MEDIA_RAW_AUDIO.
+
+* The output's raw audio format must be B_MEDIA_SHORT or
+  B_MEDIA_FLOAT.
+
+* The output must be 1 or 2 channels.
+
+* The output must be host-endian.
+
+* Again, for best performance results, leave the output's
+  buffer size unspecified.
+
+I leave you with this challenge: How about adding stop and
+play buttons for better playback control? Or perhaps you can
+evolve this modest looper into a latter day Echoplex? Go
+forth and twist Mix-A-Lot to your own sordid ends! Or, as
+my childhood hero was fond of exclaiming: "C'mon Flash, let's
+go catch them Duke boys!"

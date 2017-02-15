@@ -1,0 +1,24 @@
+# makefile for all Application Kit sample code
+
+SUBMAKES = \
+	AppKitModel \
+	Scripter \
+	colorPickerModule
+
+LEAFDIRS = \
+	BeBounce \
+	Container \
+	EZLauncher \
+	Magnify \
+	Pulse \
+	ShelfInspector \
+	Thesaurus \
+	Watcher
+
+default .DEFAULT:
+	-@for f in $(SUBMAKES); do \
+		$(MAKE) -C $$f -f makefile.all $@; \
+	done
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

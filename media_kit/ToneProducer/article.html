@@ -1,0 +1,204 @@
+<HTML>
+
+<HEAD><TITLE>At the Tone, the Time Will Be....</TITLE></HEAD>
+
+<BODY BGCOLOR="#FFFFFF">
+
+<!-- Developer's Workshop -->
+
+<FONT SIZE=+1><B>DEVELOPERS' WORKSHOP: At the Tone, the Time Will Be...</B></FONT>
+<br><B>By Christopher Tate (<A HREF="mailto:ctate@be.com">ctate@be.com</A>)</B><BR>
+
+
+<P><FONT="-1">"Developers' Workshop" is a weekly feature that provides
+answers to our developers' questions, or topic requests.
+To submit a question, visit
+<P><A HREF="http://www.be.com/developers/suggestion_box.html">http://www.be.com/developers/suggestion_box.html</A>.
+
+<P>You've seen a full-featured and glorious example of a Media
+Kit consumer node, the LoggingConsumer, but what about
+producer nodes? There are an awful lot of pure-virtual
+methods declared in the BBufferProducer class; what do they
+all do? And how do you deal with producer nodes in your
+applications?
+
+
+<P>We in DTS are painfully aware of this dearth of
+BBufferProducer examples. But behold -- a new node has
+arisen that highlights and explains the sundry pitfalls of
+buffer production in the BeOS Media Kit. It generates pure
+tones (with parameters for frequency, amplitude, and
+waveform, of course), reacts properly to difficulties in
+node delivery, and is generally a model Media Kit citizen.
+
+
+<P>Before I discuss certain details of its operation, here's
+the URL, so you can follow along at home.
+
+
+<P>&lt;<a href="ftp://ftp.be.com/pub/samples/media_kit/ToneProducer.zip">ftp://ftp.be.com/pub/samples/media_kit/ToneProducer.zip</a>&gt;
+
+
+<P>Now then, where were we?  Ah, yes:  buffer production.
+
+
+<P>As recommended by everyone remotely involved with the Genki
+Media Kit, ToneProducer is based on the new
+BMediaEventLooper class, which enormously simplifies node
+implementation. There are a few topics still left to the
+node author, however; here's how ToneProducer deals with
+them, and how you might deal with them in your own nodes.
+
+
+<P>
+<b>Do You Speak My Language?</b>
+
+
+<P>The first major area that node writers must grapple with is
+data format negotiation. When two nodes are connected, they
+go through a multi-step &quot;conversation&quot; to determine what
+data format to use. ToneProducer's format negotiations are
+relatively simple: the node only produces 44.1 KHz
+floating-point raw audio, so the only wild card subject to
+negotiation is the buffer size.
+
+
+<P>The format negotiation process uses three BBufferProducer
+methods, in this order: FormatProposal(),
+PrepareToConnect(), and Connect(). The producer initiates
+the whole process in FormatProposal(), proposing its
+&quot;favorite&quot; format, with wild cards indicating aspects of the
+media format where variation is acceptable. When
+PrepareToConnect() is called, the consumer has been given an
+opportunity to adjust the proposed format to meet <i>its</i>
+needs. At this point, the producer must ensure that the
+format is still acceptable, and reserve the connection if it
+is. This is done by choosing the connection's source and
+destination, and remembering them in whatever cache
+structure the node chooses to use. Finally, Connect() is
+called -- the end of the dialog. At this point the producer
+is not permitted to fail; the connection was &quot;guaranteed&quot; by
+a successful return code from PrepareToConnect().
+
+
+<P>&gt;From an application's viewpoint, by the way, the source and
+destination IDs that represent the connection are subject to
+change within the Media Roster's Connect() method. Don't try
+to save the free media input and media output records that
+your app found before calling Connect() -- they might well
+be invalid after BMediaRoster::Connect() returns!
+
+
+<P>
+<b>Where Do I Put My Data?</b>
+
+
+<P>The second major topic for node writers is buffer
+management. Implicit in the Media Kit API are such
+interesting questions as &quot;How many buffers do I need in my
+buffer group?&quot; and &quot;How exactly do I timestamp buffers,
+anyway?&quot; Some of these questions are more complex than they
+first appear.
+
+
+<P>For example, the number of buffers to allocate in a node's
+buffer group depends on how long the buffered data will take
+to reach its eventual destination. After all, if there
+aren't enough buffers, the producer will be unable to send
+some data because all the buffers in its group are floating
+downstream! The usual heuristic for buffer allocation,
+therefore, is to use enough buffers to completely account
+for the node's downstream latency, plus one. Because of
+rounding effects, the formula for this is (downstream
+latency / buffer duration + 2).
+
+
+<P>Buffer timestamps are subtle. The first rule is &quot;always work
+in performance time.&quot;  Real time (that is, what
+system time() or BTimeSource::RealTime() say) is never in
+sync with other hardware clocks such as audio cards, so
+trying to reconcile the two is doomed to failure. The second
+rule is that buffer timestamps should always be recalculated
+from a remembered start time, based on the amount of media
+(number of samples or frames) delivered so far.
+Recalculating from scratch for each buffer avoids cumulative
+drift that arises from trying to use a precalculated buffer
+duration.
+
+
+<P>And this isn't all: other nodes can request that you use
+<i>their</i> buffers, not your own. Your producer should be
+prepared to handle this case; see the example code for the
+recommended way to do so. It's pretty straightforward; the
+only thing to remember is this: make sure you delete your
+buffer group when you're finished. Failure to do so can
+leave your buffers orphaned in other parts of the system,
+which tends to cause Bad Things&Acirc;[TM] to happen.
+
+
+<P>Finally, producer nodes have a SetOutputEnabled() method,
+which acts like a mute button. When output is disabled, the
+producer sends no buffers downstream. However, just as your
+CD player keeps spinning while muted, so your producer
+should continue winding through its data in real time even
+when output is disabled. Keep this in mind when deciding
+exactly when to consume the source media, and whether to
+send buffers downstream....
+
+
+<P>
+<b>Tell Me How To....</b>
+
+
+<P>The third major topic for node writers is parameterization,
+the mechanism that lets the user (or other programs) change
+the node's behavior at run time. There are some vagaries of
+the BParameterWeb mechanism that bear mentioning, lest
+everyone make the same mistakes over and over again while
+learning how to work with the Media Kit.
+
+
+<P>First, don't allocate a BParameterWeb in your node's
+constructor. Comments in the Be header files in earlier OS
+releases notwithstanding, this is <i>not</i> the appropriate
+place to do so. The node's connection to the Media Roster is
+necessary to the parameter-handling process, and that
+connection doesn't exist while the node is being
+constructed. Instead, set up your parameter web in your
+node's NodeRegistered() method, which is called immediately
+after the Media Roster is informed of the node's existence.
+
+
+<P>Finally, nodes never have to delete their parameter webs.
+The SetParameterWeb() method deletes the previous web for
+you, and the BControllable node destructor deletes whatever
+web is active at the time. Between these two methods, your
+node never needs to worry about deleting its web.
+
+
+<P>Applications are another matter. While it's true that the
+Media Roster's ViewFor() method takes ownership of the web,
+and deletes it when the view is disposed of, the application
+is responsible for deleting the web itself in all other
+cases.
+
+
+<P>
+<b>But Wait -- There's More!</b>
+
+
+<P>Err, well, actually there isn't any more. There are still
+two things that ToneProducer doesn't handle yet: offline
+mode and SetPlayRate(). Both of these are somewhat
+intricate, and are being held in abeyance for a future
+newsletter article. The fact that I sacrificed the Memorial
+Day holiday weekend to <i>this</i> article might have something
+to do with it as well....
+
+
+<P>So there you have it: a thorough, profusely documented
+producer node. Now get out there and write your own already!
+
+
+</BODY>
+</HTML>

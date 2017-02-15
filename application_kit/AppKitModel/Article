@@ -1,0 +1,157 @@
+Back to Basics
+Stephen Beaulieu <hippo@be.com>
+
+In this article I'm going to reinvestigate some of the
+basic building blocks of the BeOS. We'll look at what I'll
+call the AppKit model: BMessages, BLoopers, BHandlers, and
+BMessengers.
+
+The BMessage is fundamentally a data container, commonly
+used to hold both instructions and data to be acted upon.
+BHandlers are objects that perform an action when BMessages
+are delivered to them; they handle the incoming message.
+BLoopers are threaded BHandlers that run a message loop,
+waiting for incoming BMessages and dispatching them to the
+appropriate BHandlers. BMessengers are system wide tokens
+that represent a given BLooper-BHandler pair, delivering
+messages to (and replies from) the specified BHandler.
+
+The most visible examples of BLoopers and BHandlers are
+BApplications, BWindows, and BViews. These lie at the heart
+of the BeOS APIs, and are common to most BeOS applications.
+Many developers, however, seem to use the AppKit model only
+in their interface areas, where it is pretty much required.
+Since the AppKit model has other valid uses, I'm going to
+offer some design ideas that may persuade developers to
+take advantage of its versatility.
+
+First though, a list of the AppKit model's advantages and
+disadvantages to keep in mind while reviewing my designs.
+
+Advantages:
+
+* Uses a common, familiar system where a great deal of
+  organizational work is handled by the BeOS. This includes
+  a well-defined communication system, automatic threading of
+  your app, and built-in object management through the BLooper
+  AddHandler and RemoveHandler functions.
+
+* The public class interface is easily extendable by extending
+  the messaging protocol used. The functions to handle the new
+  messages are usually private functions, and can be extended as
+  necessary.
+
+* The interface can be exposed to interapplication systems by
+  publishing the messaging protocol. This allows other apps
+  doing complementary work to interact with your application
+  easily.
+
+* The system interface is eligible for scripting, since the
+  AppKit model is the basis of the BeOS scripting mechanism.
+
+Disadvantages:
+
+* A BLooper thread's main responsibility of is to run the
+  message loop, not some other tasks. To have threads work on
+  other tasks requires using Kernel Kit threads. The BLooper
+  threading model is therefore not always appropriate to the
+  task at hand. However, combining the two models can work well
+  (i.e., a BLooper with extra, special-purpose threads for other
+  tasks).
+
+* BHandlers can belong to only one BLooper, effectively
+  serializing access to each handler. This can be problematic
+  in a system where the BHandler would (ideally) be accessible
+  by multiple threads. Some designs can work around the
+  limitation by creating a new BHandler subclass for each
+  BLooper, but this works only when the BHandlers themselves
+  do not encapsulate data that needs to be instantiated only
+  once.
+
+* Adding information to BMessages requires copying that data.
+  This can introduce significant overhead if large amounts of
+  information need to be transmitted, or if the data needs to
+  be looked at many times over the course of an operation.
+  Introducing other methods of data sharing (like putting a
+  reference to a shared memory area or a pointer to data
+  into the BMessage) can reduce the size and complexity of
+  the messages. Note that this might lead to some undesirable
+  consequences, as the recipient of the BMessage no longer has
+  to go through the messaging mechanism to access the data.
+
+Keeping these advantages and disadvantages in mind, here are
+two design schemes that use the AppKit model: the Handler as
+Data Object and Handler as Operation.
+
+Handler as Data Object
+
+In this scheme, the BHandler contains both the data to be
+acted upon and the knowledge of how modifications are to be
+performed. The data is encapsulated in a self-modifying object.
+BMessages serve as instructions for what actions to perform.
+The BLooper serves as the initial interface to the various
+objects, but would usually pass back BMessengers for the
+appropriate data objects, so the outside processes can deal
+with them directly.
+
+Example: Transaction Server
+
+Here, the data object can be independently acted upon by
+multiple threads/applications while in a guaranteed consistent
+state. BMessages instruct the server to create, delete, or
+modify objects. Change notifications can be sent back to all
+interested processes. Furthermore, the transactions can be
+recorded so that a previous state could be reinstated by
+rewinding the transaction stack.
+
+Handler as Operation
+
+In this scheme, each BHandler represents an operation that
+can be performed on some data. The BMessage carries the data
+to modify and instructions about which operations to carry out.
+The BLooper serves as a common interface to the operations,
+investigating the instructions and passing the data to the
+operations in the correct order, then sending the modified data
+back to its origin.
+
+Example: Data Filters
+
+Use BHandlers to represent add-on filters to manipulate data.
+Have each add-on create an entry function that returns a BHandler
+that performs the appropriate filter. Then simply pass the data
+to each filter as appropriate. This could be parallelized by
+calling the entry function for a new BHandler for each thread
+that needs a copy of the filter, at the expense of more memory.
+
+Example: State Machine
+
+A BLooper represents a state machine, with BHandlers representing
+each state. The looper passes the appropriate instructions off
+to each state, which responds to them and asks the BLooper to
+change state when appropriate. In this example, the BLoopers
+might contain the data to act upon, rather than a BMessage, but
+the view from the BHandler is the same.
+
+You can find some simple example code for these two schemes at
+
+<ftp://ftp.be.com/pub/samples/application_kit/AppKitModel.zip>
+
+Both schemes perform the same work, transforming strings to
+uppercase, lowercase, or mixed case (with every word capitalized.)
+They implement the code to modify the strings the same way, using
+the BString class functions: ToUpper, ToLower, and CapitalizeEachWord.
+They also act on the same two strings. The only difference between
+the two examples is the schemes used to organize the code (and
+correspondingly, the printed output).
+
+This structure is obviously overkill for simple string modification,
+but the schemes become more useful as the complexity of the data
+and operations increases. Strings are just an easy way to
+demonstrate the various designs. The Notes file in each folder
+explains how the project is put together. Also, note that both
+applications are useful only when run from the command line, as all
+feedback is through printf() calls.
+
+I hope these designs can be helpful in your programs, or at least
+will start you thinking more about the overall design of
+your application.

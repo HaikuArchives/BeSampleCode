@@ -1,0 +1,12 @@
+StringApplication
+A simple system where BHandlers are used as data objects, encapsulating the storage of the data and methods for its modification.  BMessages are used to carry instructions and information about the data objects.  BLoopers are used as data object servers, handling only the initial creation of the data objects and information about all of the available objects.
+
+Files:
+
+StringApplication (.h & .cpp) - the main application, which contains a StringLooper pointer member.  The TestPhrase function creates a new phrase, and transforms it to uppercase, lowercase and mixedcase and displays the results.
+
+StringLooper (.h & .cpp) - the interface for creating new strings and for getting information about the strings available.  Defers all other actions to the strings themselves.  In a real application, the BLooper might also contain an interface for deleting the objects, and for getting a messenger for the specified objects already in existence.  These functions were omitted for greater clarity.
+
+StringHandler (.h & .cpp) - the data objects themselves.  These BHandlers deal with all aspects of modifying and reporting about their current state.  A real implementation would probably handle references to what items have opened the object, along with a notification system for informing interested parties about changes in state.
+
+StringHandlerProtocol.h - definition of the common message constants.

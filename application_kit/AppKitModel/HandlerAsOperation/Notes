@@ -1,0 +1,14 @@
+StringFilterApp
+A simple system where the BLooper is essentially a server for StringFilters.  Each filter is loaded by the StringFilterLooper.  Then messages are sent to the looper, which examines them and directly passes them to the appropriate StringFilter (a BHandler).  The data to be processed is contained in the BMessage itself, which also identifies the operation to be performed.
+
+Files:
+StringFilterApp (.h & .cpp) - the basic application, which contains a StringFilterLooper pointer member. The ReadyToRun() function does all of the work testing the phrases.
+
+StringFilterLooper (.h & .cpp) - the BLooper subclass, which loads all of the appropriate filters.  Filter requests come to the looper (rather than the handlers), which determines which Filter to apply, instructs the Filter to do its work, and then responds to the message with the updated phrases.
+Note that this file includes hard-coded references to the various filter types available.  Normally there would be a specified way to find and load filters, as well as a way of tracking which filter should be called for each opcode.  In this simple example, I have just hard coded the information.  A real implementation would use a better, more dynamic system.
+
+StringFilter (.h & .cpp) - the abstract BHandler class, which does the actual string manipulation.  The class makes sure that the GetOpcodes and Filter hook functions are correctly called.
+
+Filters (.h & .cpp) - three concrete examples of the StringFilter class.  They make the string lower case, uppercase or mixed case, depending on which is called.
+
+StringFilterProtocol.h - defines the FILTER and OPCODES message constants.

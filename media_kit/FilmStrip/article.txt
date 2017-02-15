@@ -1,0 +1,163 @@
+How to Drop Frames
+by Todd Thomas -- <tt@be.com>
+
+Here's something you weren't expecting: sample code for a
+BeOS digital video application that plays a maximum of 4
+frames per second and can be set to drop as many frames as
+you like. But you can also think of it as an exploration of
+BMediaTrack's ReadFrames() function.
+
+The app and its central class are named FilmStrip, after the
+medium that falls somewhere between overhead transparencies
+and 16mm film in the great hierarchy of audio-visual presentation
+formats. A film strip is, well, a strip of exposed positive
+photographic film that is run one frame at a time through a
+projector, usually to the accompaniment of a narrative on audio
+cassette. It's a lot like a movie, but without all those
+gratuitous extra frames used to make stuff move.
+
+So now you're asking yourself, "How can I use BeOS to simulate
+the immersive multimedia experience of the film strip, when
+all I have are these movie files full of gratuitous extra
+frames?" That's what the FilmStrip class and app are all about.
+
+You can find the source code for FilmStrip at:
+
+	ftp://ftp.be.com/pub/samples/media_kit/FilmStrip.zip
+
+The FilmStrip class extracts individual frames as bitmaps out
+of any digital video file the BeOS has a codec for, using the
+magic of the BMediaTrack class. The heart of the FilmStrip
+class is its function
+
+	BBitmap* NextFrame(void)
+
+which returns a pointer to an internally allocated BBitmap
+containing the "next" frame. The meaning of "next" depends
+on which of two modes the FilmStrip object is in: in Frame
+mode, "next" is taken literally to mean the frame immediately
+following the current frame; in Time mode, "next" means the
+frame occurring some number of microseconds after the current
+frame.
+
+BMediaTrack makes it easy to get frame data from a media file.
+It's as simple as
+
+	status_t err;
+	int64 numFrames;
+
+	err = track->ReadFrames((char*)someBuffer,
+		&numFrames);
+
+for some BMediaTrack* track.
+
+Of course there are a few preparatory steps you need to take
+first. You can only instantiate a BMediaTrack from a BMediaFile.
+And in the case of FilmStrip, we want that track to be the
+video track of a movie, as opposed to the audio track or the
+laugh track or whatever. Next, you need to negotiate with the
+codec which format you want the decoded data to be in.
+FilmStrip's needs are simple -- it just wants the video data
+to be decoded if necessary. Here's a fragment of code from
+FilmStrip's private SetTo() function that accomplishes all
+that:
+
+	mFile = new BMediaFile(&ref);
+	err = mFile->InitCheck();
+	if (err == B_OK) {
+		int32 i = 0;
+		do {
+			mTrack = mFile->TrackAt(i);
+			err = mTrack->InitCheck();
+			if (err == B_OK) {
+				// sniff out whether it's the video track
+				// and break out if it is
+				mFormat.u.raw_video =
+					media_raw_video_format::wildcard;
+				mFormat.type = B_MEDIA_RAW_VIDEO;
+				err = mTrack->DecodedFormat(&mFormat);
+				if (err == B_OK) {
+					if (mFormat.IsVideo()) {
+						break;
+					}
+					else {
+						// when mFile is deleted it
+						// will delete all open tracks
+						// as well, but why waste
+						// the memory on tracks
+						// we're not using?
+						mFile->ReleaseTrack(mTrack);
+					}
+				}
+			}
+			i++;
+		} while (i < mFile->CountTracks());
+
+If your needs are more complex, you can change other fields
+of the media_format object (mFormat in the code above) as
+necessary. Note that ReadFrames() always reads one and only
+one frame from a video track, but reads as many frames as
+negotiated from an audio track. After you've successfully
+negotiated an output format, you can safely use ReadFrames().
+
+Which frame (or frames) does ReadFrames() read? Whichever
+you tell it to using the SeekToFrame() or SeekToTime()
+functions. Be aware that not all media codecs are capable of
+seeking to arbitrary frames in a track -- some can only seek
+to key frames. Note that your nearest keyframe may be behind
+you. You can pass either function the flag
+B_MEDIA_SEEK_CLOSEST_BACKWARD or B_MEDIA_SEEK_CLOSEST_FORWARD
+to indicate which keyframe you want relative to the frame you
+asked for. FilmStrip gives examples of using both SeekToFrame()
+and SeekToTime() at the end of NextFrame().
+
+Note: the R4.5.2 Indeo-5 codec doesn't behave properly when
+you pass B_MEDIA_SEEK_CLOSEST_FORWARD to SeekToFrame() -- it
+actually does the opposite. If you play an Indeo-5 encoded
+movie with FilmStrip in Frame mode, you'll notice it only
+shows frame 0. This bug is fixed in the next release of BeOS.
+
+There are two FilmStrip constructors.
+
+	FilmStrip(const entry_ref& ref)
+
+takes the entry_ref of the file you wish to grab frames from.
+It defaults to Frame mode, and tries to be clever about
+setting the interval between consecutive frames in Time mode.
+
+	FilmStrip(const entry_ref& ref,const int32 mode,
+		const bigtime_t grabInterval)
+
+lets you explicitly set the mode and frame interval.
+
+FilmStrip also has a static member function
+
+	static status_t SniffRef(const entry_ref& ref)
+
+that does a quick 'n dirty test to see if ref's MIME type is
+of supertype "video". You can use this function to quickly
+reject a ref that's not some kind of movie, but it doesn't
+guarantee that there's a codec for the specific type of movie
+if it is.
+
+There are a few other things of interest in the FilmStrip
+application. It uses two BWindow descendants to accomplish the
+tasks of showing frames from and letting you control a FilmStrip
+object. The FilmStripWindow class defines the app's main window.
+It contains a single BitmapView which displays the frame obtained
+from its member FilmStrip object. FilmStripWindow has a member
+BMessageRunner which sends a message to the window at a user
+ specified interval indicating it's time to show the FilmStrip's
+next frame. FilmStripWindow also has a member BMessenger which
+targets a floating control panel window.
+
+The ControlWindow class defines that floating control panel
+window. It contains a BMessenger targeted at the main window, so
+it can send messages when the user tweaks its controls that will
+cause the main window to update its FilmStrip object.
+
+I hope FilmStrip helps you see the possibilities of BMediaTrack's
+ReadFrames() function. I think the next step for the FilmStrip
+application would be to play the audio associated with a video
+frame (if any) while the frame is showing. And the FilmStrip
+class could be used to make an interesting screensaver. Have fun!

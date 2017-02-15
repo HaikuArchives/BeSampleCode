@@ -1,0 +1,133 @@
+Just How Much BeOS Do You Really Need?
+by Trey Boudreau -- <trey@treysoft.com>
+
+As developers, you're probably aware that BeOS is a
+layered system. The kernel is at the bottom with its
+drivers and modules, followed by a few libraries (root,
+net, textencoding), various servers (app, input,
+registrar, net), a few more libraries (be, netdev,
+tracker) and finally, applications. The whole collection
+makes a wonderfully synergistic system. But just how
+much of that stack do you really need?
+
+
+It Depends™
+
+What do you want to do? Occasionally, a demo coder
+thread erupts on BeDevTalk. Invariably, someone laments
+about the overhead of this or that feature of the OS.
+Without commenting on the relative merits of these
+discussions, I can tell you how to get as close to the
+silicon as you can without writing your own drivers.
+But to do that, we have to decide what we don't need.
+
+
+R.I.P. app_server
+
+If you want to get close to the hardware, you've got to
+go around the app_server. Or better yet,  not run it at
+all. Once you take this step, every other server in the
+OS is useless, so they can go too. Because networking
+runs as a server (at least until BONE shows up),
+networking is right out. No servers means no libbe.so
+and friends. Just about the only thing left is libroot.so,
+but that's quite a bit. You still have just about all the
+POSIX we support, plus access to BeOS-specific features,
+such as loading add-ons and creating semaphores. This
+means any class of driver for which you know the ioctl()
+API is still usable. We'll get back to this in a bit.
+
+
+Booting BeOS
+
+By systematic trial and error, you'd find that you need
+very few files to boot BeOS. I'll save you some time
+and tell you what you need for the loader to boot to a
+particular partition. You'll definitely need the kernel
+(and zbeos on x86 hardware), and whatever
+drivers/busses/modules support your particular hardware.
+You'll need the accelerant for your graphics card(s).
+And you'll need two other files: /boot/beos/bin/sh and
+/boot/beos/system/boot/Bootscript. Bootscript can be
+empty, but it must exist. sh is the program the OS
+executes to get things started. BASH is nice, as shells
+go, but not needed for this operation, so I decided to
+replace it with my application. For getting started,
+you can just replace sh with your own app, but for grins
+I removed (almost) everything that wasn't required for
+my particular hardware. 'du -k /test/beos' reports a
+measly 2493K.
+
+
+The Demo
+
+NOTE: I Am Not A Demo Coder. Besides, this was not
+really an exercise of my demo coding skills. I'm just
+the point man, and I've discovered these two tips/traps:
+
+* To aid debugging, you'd like to keep a log file
+  (and/or generate serial debug output). Calling
+  freopen("/boot/var/log/demo.out", "w", stdout) is
+  useful in this respect. You can do what you like with
+  the other standard file handles. In my program I get
+  stdin from /dev/null and freopen("/boot/var/log/demo.err",
+  "w", stderr) in case something I load as an add-on uses
+  it. You can also call disable_debugger(1) and arrange
+  for your app to get all the signals itself, but I
+  don't do that in the demo.
+
+* Set the ADDON_PATH and LIBRARY_PATH environment
+  variables. If you don't, load_add_on() will fail --
+  even if you specify a full path to the add-on.
+
+The meager demo application can be found at:
+<ftp://ftp.be.com/pub/samples/graphics/SlimDemo.zip>
+
+If you've ever looked into the test harness shipped in
+the R4 Graphic Driver Kit, chunks of the sample code
+would be eerily familiar. Programming at this level is
+fairly unexciting, and this code is no exception. The
+main() function initializes the standard file descriptors
+and environment variables mentioned above, and then
+spawns and waits on a thread to handle the display
+chores.
+
+The spawned thread hunts down and opens a graphics
+device, and then attempts to load the corresponding
+accelerant (R4 graphics drivers are two-part beasts, as
+is common under BeOS). After the accelerant is loaded,
+the code sets the first reported display mode and then
+begins the cheesy (and short) "animation." I didn't
+bother to set up and use hardware acceleration, but
+it's easy to do, and the harness program in the driver
+kit will show you the way. When the animation finishes,
+the accelerant is uninitialized and unloaded, and the
+device is closed. The thread terminates, and shortly
+thereafter so does the application, leaving the kernel
+silently in charge of the machine.
+
+
+B_DONT_DO_THAT
+
+A friendly DTS staff member pointed out that while you
+can run the sample code while the full BeOS is running,
+you won't like the results. The current driver model
+doesn't do anything in the way of preventing you from
+opening and initializing the graphics device if it's
+already running. If you have specific combinations of
+graphics cards in your machine (and a BIOS that isn't
+broken, but that's another story), you can open and
+control the other graphics card(s). You might also
+consider not replacing /boot/beos/bin/sh on your
+primary boot partition, but rather making yourself a
+tiny test partition to play with. Caveat Programmer.
+
+
+Now What?
+
+That's pretty much up to you. Access to other devices
+is mostly a matter of issuing the right ioctl() calls.
+If you can't find them documented in the BeBook, in
+headers, or in some newsletter article, e-mail me. One
+of you d00dz write a l33t dem0, and show me just how
+lame my example really is.

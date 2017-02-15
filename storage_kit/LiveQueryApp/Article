@@ -1,0 +1,329 @@
+Let's See What We Can Find,
+Part 2: Live Queries
+Stephen Beaulieu <hippo@be.com>
+
+In last week's article I talked about static queries,
+one-time glimpses at which entries matched certain
+criteria on a given disk.  If you have not done so
+already, please go back and read that article, it
+will make this article much easier to understand.
+
+<http://www.be.com/aboutbe/benewsletter/volume_II/Issue28.html#Workshop>
+
+This week we are going to look at using live queries
+to keep the list of matching entries up-to-date in an
+ever changing filesystem.  The associated sample code
+for this week can be found at:
+
+<ftp://ftp.be.com/pub/samples/storage_kit/livequeryapp.zip>
+
+Basic Mechanism
+The basic theory behind a live query is pretty straight
+forward.  A BQuery is built in the traditional fashion,
+and then assigned a target messenger to deliver update
+messages to.  The BMessenger specified by SetTarget()
+could receive messages identifying items that now meet
+(or no longer meet) the query criteria.  These messages
+could start arriving as soon as the query is Fetch()'d
+and will continue until the BQuery object is deleted
+or Clear()'d.
+
+Two messages with a what data member of B_QUERY_UPDATE can be sent
+to a target messenger.  They are differentiated by an
+int32 data item called "opcode", one being B_ENTRY_REMOVED
+the other being B_ENTRY_CREATED.  The rest of the
+messages detail exactly which item needs to be added
+or removed from the matching list.
+
+This identification is not done with BEntries, or even
+entry_refs or node_refs as you might like, but with
+the components that build those structures: the
+nodes(ino_t), device ids (dev_t) and names of the item
+and parent.  Much like using the C functions from last
+week's article, you will need to build the more useful
+objects from these blocks.
+
+The full descriptions of these messages can be found at:
+
+<http://www.be.com/documentation/be_book/The%20Storage%20Kit/Query.html>
+
+Live Queries and the Node Monitor
+One thing you will note from the documentation is the
+suggestion that the Node Monitor is utilized in
+conjunction with live queries.  This is an exceedingly
+good idea on several different fronts.  First and
+forsemost, the BQuery will only inform you whether a
+given entry meets the query criteria or not.  Usually
+you will be trying to display information about the
+item itself, and this can change without ever invoking
+a B_QUERY_UPDATED message.  So if you are trying to
+keep in sync with the data on disk (and you probably
+are or you wouldn't have implemented a live query to
+begin with) it behooves you to also use the Node Monitor
+to let you know when your entry is modified.
+
+A good basic look at the Node Monitor mechanism was
+provided by Scott Barta in his Folder Watcher newletter
+article:
+
+<http://www.be.com/aboutbe/benewsletter/volume_II/Issue19.html#Insight>
+
+and the documentation can be found at:
+
+<http://www.be.com/documentation/be_book/The%20Storage%20Kit/NodeMonitor.html>
+
+I will not go into the details of how to implement node
+monitoring here.  A look at the documentation, Scott's
+article and sample code, and the LiveQueryApp itself
+will show you what you need to know.  It will suffice
+to say that the Node Monitor sends update messages to
+a messenger whenever a specified node is modified.
+You can then use these messages to update your entry
+information as needed, in much the same way as you
+might use the query update messages.
+
+One thing worth mentioning is that in many cases you might
+receive multiple, complimentary updates from the query and
+the Node Monitor.  For example, if you were to use
+LiveQueryApp to look for all source code that contained
+Query somewhere in the file name, and then modified the
+file name so that it changed, but still met the query,
+you might receive the following 3 messages:
+
+	B_QUERY_UPDATED : B_ENTRY_REMOVED
+		(the name of the item has changed)
+	B_QUERY_UPDATED : B_ENTRY_CREATED
+		(the new name meets the query)
+	B_NODE_MONITOR  : B_ENTRY_MOVED
+		(the item has moved)
+		
+This redundancy in notification is a good thing, but
+there is work that needs to be done to handle the
+multiple messages correctly.  You definitely don't want
+the overhead of creating and removing items from your
+lists unecessarily.  You also need to be able to recognize
+when a redunant message comes in, so that you do not
+create new items in your list when an update corresponds
+to something already there.
+
+It should be obvious at this point is that a live query
+application needs to have a caching mechanism to track
+details about its matching nodes.  The only way to know
+what items need to be updated is by caching all of the
+relevant information needed to identify the node, along
+with all of the information about the node you care about.
+Then as changes come in, the appropriate structure can be
+found and updated with the new information (or removed if
+it no longer exists or if it no longer matches the query.)
+It turns out that implementing this caching mechanism is
+the most difficult part of dealing with live queries (or
+the node monitor for that matter.)
+
+How live is live?
+The fundamental idea behind the live query is to keep your
+internal list of matching items in step with the current
+state of the filesystem.  A valid question to ask is
+exactly how live do you need this list to be?  It is
+important to get an answer to this question, as it will
+determine the lengths to which you need to go to keep in
+sync with the disk.  Certain rare applications have the
+need to keep a list of items absolutely in sync with the
+disk.  These apps have a very low tolerance for error.
+The Tracker is a good example of an application that is
+expected to have it's queries keep in step as much as
+possible.  Users expect this of the main interface for
+the BeOS.  There is a lot of work involved with keeping
+a query absolutely true to the filesystem, far more than
+I could easily put into an understandable bit of sample code.
+
+The reason behind all of the work has to do with the nature
+of the updating mechanism.  There is no guarantee that all
+of the B_QUERY_UPDATED and B_NODE_MONITOR messages will
+come through to you. The message sending system will drop
+these messages if unable to deliver them, rather than keep
+trying and slow down the system in general.  There are a
+whole host of edge conditions that a truly robust live
+query application would need to have accomodations for.
+There are various race conditions that would need to be
+dealt with, such as a file moving between the time of
+identification of the query match and pulling the entry
+out of the query.  There is also a period of time between
+the pulling from the query and the starting of node
+monitoring that could cause a given entry to be untrackable.
+Users need to be aware of these 'limitations' of the query
+and node monitoring systems, and be prepared to deal with
+failures to instantiate items identified in the query.  As
+you will see, the sample code deals with some of these issues.
+
+Also, the nature of your query can determine if you
+receive proper update messages.  As you know, a query
+needs to have at least a single indexed attribute
+in the search criteria.  But the order in which these
+attributes change currently has an effect on whether
+a query update will arrive.  Take for example the
+instance where an application creates it's own
+document type, an has a single indexed attribute and
+the document's mime-type (the BEOS:TYPE attribute).
+The order in which these attributes are written into the
+file can have a great effect on updates.  Let's say that
+the indexed attribute is written before the mime-type.
+If you have an open live query on the mime-type and the
+indexed attribute, and someone copies a file, here is the
+sequence of events:
+	1) indexed attribute is written
+	2) the query notices a new item in the index but sees that
+	the mime type does not match.
+	3) no query update is sent
+	4) the matching mime-type is set
+
+This file that matches the query will not be sent in a
+query update message.  If, on the other hand, the
+non-indexed mime-type was written before the indexed
+attribute, the update message would be sent, as the
+query criteria would be met when the new file was
+examined.
+
+Right now the only workaround to this problem is to not
+query on non-indexed fields but instead to institute a
+filter in the target to check the validity of the items.
+Or you could make sure that all unindexed attributes
+are written to a file before indexed attributes.
+
+Still, the main source of problems when dealing with live queries
+come from the free-form nature of the file system: anyone
+can create or change a matching entry at any time.  One way
+to make queries more reliable is if you search for items
+that only your application can create.  Then barring a
+user bring a whole slew of matching items from off disk, it
+will be much easier to maintain a very tight sync between
+the filesystem and the internal list.
+
+Architectural Changes
+If you were to examine side by side this week's LiveQueryApp
+and last week's QueryApp you would see a significant
+difference in underlying design, even though the interface
+itself is nearly identical (with the exception of the
+removal of the methods for retrieval of static queries.
+The combining of these two apps into one is left as an
+exercise for the reader...although personally I suggest
+that implementing an application of your own would be much
+better.)  Without going into the code in great detail it is
+beneficial to note the major changes.
+
+First, due to the nature of live queries and the
+possibilities of impending updates it is desireable to move
+the initial query iteration code into a separate thread.
+Not only does this free up the window thread to handle
+incoming B_QUERY_UPDATED and B_NODE_MONITOR messages, it
+also makes the interface much more responsive.  You can
+see items being added to the list rather than waiting for
+the iteration to complete before the end.  One implication
+of this is threaded model is the need to use a BLocker to
+protect the BLists for tracking the contents of the query
+and insure the integrity of the lists.
+
+The tracking lists are the most important stuctural changes
+in the application.  To adequately keep track of the
+matching items, and to recognize and indentify the items
+which need changes, a caching mechanism has been created.
+It is a system based on a data structure for caching entry
+information, and two lists: a valid list and a zombie list.
+
+The live_ref data structure represents the information this
+application cares about for each matching entry.  This
+includes items meant to uniquely identify the item (node,
+device id, parent node, name), a pointer to the data we care
+to display to the user (a BStringItem), and two fields for
+the caching mechanism (status and state).  live_ref.status
+contains information about how successful the application
+was in acquiring the needed information about the entry.
+If all of the entry's information was successfully retrieved
+it is marked B_OK.  If there was an error initializing the
+object or retrieving the appropriate information (as might
+be the case if the matching node was moved in between the
+time the update message was generated and attempting to access
+the entry described), then status will log the error
+encountered, like B_ENTRY_NOT_FOUND. The state, on the other
+hand, records whether the item should be included in the
+valid list if all of the information is sucessfully retrieved.
+
+So, the valid list is where all entries are cached if they
+match the query and if they could be successfully
+instantiated.  Items in the valid list also have their
+BStringItems added to the ListView that displays results
+to the world.  Any item that no longer matches the query,
+could not be instantiated, or gets an update before the
+intial retrieval from the BQuery gets moved into the zombie
+list.  As every update comes in from either the Node Monitor
+or the query, both lists are checked to see if the item
+already has a live_ref cached.  If one is located, it is
+updated, and if appropriate (ie it was not removed from the
+query and all the information could be accessed), moved
+into the valid list.
+
+A short example is probably in order.
+
+void 
+LiveQueryWindow::UpdateEntry(live_ref *rec, bool valid)
+{
+	entry_ref ref;
+	ref.device = rec->pdev;
+	ref.directory = rec->pnode;
+	ref.set_name(rec->name);
+
+	BEntry entry(&ref);
+	if ((rec->status = entry.InitCheck()) == B_OK) {
+		BPath path;
+		entry.GetPath(&path);
+		if ((rec->status = path.InitCheck()) == B_OK) {
+			if (rec->item == NULL) rec->item = new BStringItem(path.Path());
+			else if (strcmp(rec->item->Text(), path.Path()) != 0) {
+				printf("new path: %s\n", path.Path());
+
+				rec->item->SetText(path.Path());
+				if (valid) {
+					fValidView->InvalidateItem(fValidView->IndexOf(rec->item));
+				}
+			}
+		}
+	}
+	
+	if (valid && rec->status != B_OK) ValidToZombie(rec);
+	else if (valid == false && rec->status == B_OK && rec->state == B_OK)
+		ZombieToValid(rec);
+}
+
+Before we get to this function we have set the live_ref state to
+determine whether it should be in the valid list or not.  The
+only time an entry should not be in the valid list is if it
+has been removed from the query.  Then we attempt to instantiate
+the entry and get the info we need.  We record the status of
+each operation in live_ref.status as we go.  Then we do a simple
+test: if the item is in the valid list currently, but we failed to
+get the info we need, it is moved to the zombie list.  Likewise,
+if the item is in the zombie list, we succeed in getting the info
+we need, and it is not an item that has been removed, we move it
+to the valid list.
+
+Finally, I will note several suggestions for improving the
+caching mechanism, but which would have added uneccesary
+complexity to the sample code.  The current caching
+implementation is not very memory efficient.  Items that
+no longer match the query are kept around indefinitely in
+the zombie list on the off chance that they would be needed
+again.  In addition, as node monitoring is not turned off,
+the removed node will still generate updates if it is changed.
+One improvement would be the addition of a timed event that
+regularly clears the zombie list of items with a B_ENTRY_REMOVED
+state.  It is also possible to implement the caching and
+tracking within a single list, or to implement the valid list
+inside fValidView by using a subclass of BStringItem that
+contains the live_ref information in addition to the
+information that is displayed.  This subclass would become the
+standard data storage for both the valid and zombie lists.
+
+As you can see, live queries are very powerful, but there is
+a corresponding increased amount of work necessary to use them
+correctly.  If you are prepared for the extra effort, and do
+not blindly depend on accuracy of the updates, live queries
+can add a lot to your application.

@@ -1,0 +1,41 @@
+BeOS R4 Graphics Driver Kit.
+(alpha release 2, 1999-03-30)
+
+Changes Since alpha release 1
+ • The ram_driver and sample_driver have been updated to compile under R4.0 systems by default.  To compile under a post-R4.0 system, add the symbol "POST_R4_0"  to the DEFINES= line in the kernel driver makefile.  No changes are required in the accelerant.
+ • The previously  mentioned (but erroneously omitted) "makefile-engine" is now included.  It is the same as the version shipped with R4.0, but it's included for completeness.
+ • The test harness has been fixed to compile under R4.0.  It was using the post-R4.0 name B_RELATIVE_TIMEOUT (a synonym for B_TIMEOUT) in a call to aquire_sem_etc().
+ • Some contact info for the author has been added to the end of these release notes.
+
+What's in the Kit
+This kit contains a first, rudementary, cut at documentation for the R4 graphics driver API.  It is woefully incomplete, but it's a start.  Please feel free to point out its shortcomings: nothing is too trivial.  Right now it's text-only.  I'll be working on an HTML-ized version,  as well as incorporating your feedback/suggestions for the next release.
+
+This kit also contains the source code for the following components: a sample driver from which to start working, a RAM-based frame buffer driver built from the sample driver, a command-line testing harness, and a utility to force the kernel to reload a driver.  Each of these will be described more completely below.  All of the code uses the R4 makefile engine found in /boot/develop/etc.  I've included the makefile engine in this kit to ensure everybody is working with the same version.
+
+The Test Harness
+The source for the test harness can be found in the test_harness directory.  Type 'make' to build the harness command in obj.XXX (where XXX is your platform type - x86 or ppc).  harness presents you with a pick-a-number interface to exercise the driver.  Play with it, look at the source.  Send comments/improvements.  More details later.
+
+The Sample Driver
+The source for the sample driver can be found (coincidentally enough) in the sample_driver directory.  The directory structure breaks the source code up into three pieces: kernel driver, accelerant, and shared headers.  There is a makefile in the sample_driver directory that will build all of the componets.  The makefiles for the accelerant and kernel driver have been modified from the standard R4 makefile engine to include 'install' and 'remove' targets that will place their respective components in the proper location in the /boot/home/config/add-ons heirarchy.  Both of these new targets are available from the top-level makefile.
+
+
+The Ram Driver
+The source for the RAM-based frame buffer can be found in the ram_driver directory.  It is a modified version of the sample_driver that presents the app_server with a minimalistic device.  Its primary utility at this time is to give folks with only one video card a device to use so they can telnet in and run the test harness against their new driver.  When installed, it creates a device named '/dev/graphics/!RAMBUFFER_00'.  Because the device file system returns entries to read_dir() in ASCII sort order, and because the current app_server uses the first device it can properly initialize, the ram_driver will be used if it's installed.  Install using 'make install' from the ram_driver directory. Make sure to do a 'make remove' from the ram_driver directory when you no longer need it.
+
+Nudge
+The source for the nudge utility can be found in the test_harness directory.  The nudge utility forces the device file system to re-evaluate all of the device entries exported from a driver with the name specified.  Usage is simple: 'nudge driverfilename'.
+
+Tips, Tricks, Etc.
+A collection of bits of information collected while fighting the good fight.  Feel free to add to this list.
+
+If at all possible, find yourself an original Matrox Millennium card (not the Millennium-II).  They're getting kind of old, so you're more likely to be able to find a used one cheap.  This card has a jumper block on it that allows you to specify if it should present itself as a standard VGA device or not.  When VGA mode is turned off, the PC's BIOS will ignore it and use another video card in your system.   Until your new driver is ready, BeOS will use the Millennium, giving you the opportunity to run in a graphical environment, yet still be able to test your code against a BIOS-initialized graphics card.
+
+If you're writing a driver for a PCI graphics card, you can use any of the supported PCI Matrox cards, so long as you get the order of the cards in you machine "right".  The BIOS scans the PCI slots in  a particular (but different for each BIOS) order, and you can affect which card the BIOS boots on by rearranging the cards.  If you've got an AGP card, you're not so lucky.  On my machines (at least), any PCI graphics card disables any AGP device (hence my recomendation for the Millennium-I ).  You may or may not be able to affect this with a BIOS setting.
+
+Contact Info
+In case you're wondering who to contact about problems with this kit or about the general business of graphics drivers under BeOS:
+
+	Trey Boudreau
+	trey@be.com - or
+	trey@treysoft.com
+

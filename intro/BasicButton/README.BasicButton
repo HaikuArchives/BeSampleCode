@@ -1,0 +1,19 @@
+Basic Button Project README
+===========================
+
+This project is intended to show you the basics of using user interface elements in a window.
+It creates a window and places a button in the window. Pressing the button updates the 
+title to reflect the click count.
+
+Files
+=====
+
+The archive should contain the following files:
+
+README.BasicButton					-- This file
+BasicButton.proj							--	Metrowerks project file
+
+BTSButtonApp.cpp							-- Source files 
+BTSButtonApp.h					
+BTSButtonWindow.cpp
+BTSButtonWindow.h

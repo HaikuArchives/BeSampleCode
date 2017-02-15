@@ -1,0 +1,27 @@
+ScriptWorld Project README
+==========================
+
+This is simple application that demonstrates Be scripting.
+It allows you to build and send scripting messages to any
+open application, window, or view.
+ 
+Files
+=====
+
+The archive should contain the following files:
+
+README.ScriptWorld	-- This file
+ScriptWorld.proj	-- BeIDE project file
+ScriptWorld.rsrc	-- Application resource file
+makefile			-- project makefile
+
+ScriptWorld.cpp		-- Source files
+ScriptWorld.h
+ScriptWindow.cpp
+ScriptWindow.h
+ScriptView.cpp
+ScriptView.h
+SendView.cpp
+SendView.h
+PropDump.cpp
+PropDump.h

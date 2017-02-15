@@ -1,0 +1,238 @@
+Monitoring Disk Drives Using devfs
+
+The other day, I was admiring the largish pond that was
+placidly engulfing our parking lot, when I chanced to see
+someone sitting on the curb at the other end of the lot,
+casting their fishing line into the murky depths. At first I
+assumed it was someone catching trout for the newly-opened
+fish restaurant next door. When her eyes met mine, however,
+I realized that it was none other than the infamous hacker,
+Morgan le Be.
+
+"Hey, it's a good thing you're here," she called out to me.
+"Fishing always brings out my philosophical side. So, tell
+me: how do I know when a CD is inserted into or removed
+from a drive? For that matter, can I tell if a drive itself
+is being inserted or removed from my system?"
+
+The answer to this question is somewhat involved, so I
+promised her that I'd write a newsletter article about it.
+Well, here it is.
+
+Introducing devfs (to the Rest of Us)
+
+The solution to this problem depends on a somewhat clever
+use of devfs to get information about the drives and
+removable media in your system. Unlike many previous
+articles on the subject, I will be assuming that you are
+approaching devfs from the application-writing level, not
+as a driver writer. So here's a gentle introduction to
+devfs for the uninitiated.
+
+devfs is the (not-so-) friendly name we give to the "device
+file system". The device file system is a virtual collection
+of directories and files, mounted at "/dev", that the system
+creates to give low-level access to various devices in your
+system. This includes disk drives, input devices, and
+peripheral cards. This low-level system allows you to
+communicate directly with the drivers that work with the
+hardware on your system -- if you know what you're doing.
+(Of course, as per any low-level and high-power construct,
+you have an immense opportunity to shoot yourself and
+attendant hardware in the foot if you muck around with these
+devices unadvisedly, so do be careful!)
+
+How do you work with these devices? If you're familiar with
+UNIX, you'll recognize the paradigm instantly. Although the
+files in devfs are not actual files stored on disk, you work
+with them as if they were actual files, meaning that you can
+read and write to them using the read() and write() system
+calls, among others. Similarly, the directories in devfs
+aren't actual directories on a disk, but you can traverse
+them using standard directory commands. Note that devices
+are identified primarily by the directory structure (which
+is generally extensive and descriptive); the files reside
+at the bottom of the directory structure, usually with
+terse names, to provide the actual access to the device.
+For a more complete introduction to devfs, read the Good
+Book:
+
+<http://www-classic.be.com/documentation/be_book/Drivers/
+Intro.html#devfs>
+
+So, to talk to a driver, you simply find the file that
+corresponds to the driver you want to talk to, and invoke
+system functions on the file to communicate with the driver
+-- for example, read() and write() will usually get raw data
+into and out of the driver. There is an additional system
+call, called "ioctl", that's extremely handy when talking to
+drivers -- in fact, we'll be making use of it in just a
+moment. ioctl (short for "I/O Control", we pronounce it
+"eye-AWK-tul") is a generic interface that allows you to
+send an opcode and a data structure to the driver to get
+information into or out of the driver. For the curious,
+<Drivers.h> contains a big list of common ioctl opcodes
+that drivers support, and what they do.
+
+Introducing Drive Daemon
+
+Now that the introductory remarks are out of the way, let's
+look at the code. Drive Daemon is a background process that
+tracks all of the disk drives in the system, and monitors
+their status. It sends out notifications when certain
+actions happen that affect disk drives. You can find the
+code at:
+
+<ftp://ftp.be.com/pub/samples/storage_kit/DriveDaemon.zip>
+
+There are two basic kinds of actions that DriveDaemon
+detects and handles:
+
+1. The drive itself is added or removed (e.g. plugging in or
+   unplugging PCMCIA drives).
+2. The media inside the drive changes (e.g. when you insert
+   or eject a CD).
+
+The distinction between these two kinds of events is subtle,
+but it's an important one, because these two different kinds
+of actions end up being detected by DriveDaemon in totally
+different ways.
+
+Enumerating the Drives in the System
+
+The first task that befalls Drive Daemon is to locate all of
+the disk drives in the system. This is done by examining all
+of the directories under /dev/disk and finding all the files
+named "raw". By naming convention, files in the /dev/disk
+hierarchy called "raw" are used to obtain raw access to a
+disk, as opposed to access to specific partitions on a disk.
+Once we find one of these files, we create a Drive object
+(which is in charge of monitoring the status of this disk
+drive) and add it to a list of drives that we're keeping
+track of.
+
+To be a bit more selective about what kinds of disks we're
+interested in, Drive Daemon can query the driver about what
+kind of disk a particular device entry represents. This is
+done by using the ioctl system call mentioned above to
+issue the command B_GET_GEOMETRY. For example, here's how
+we can tell if a particular drive is a CD-ROM drive:
+
+    int fd = ...; // this is the POSIX descriptor for the
+                  // raw disk, obtained via open()
+    device_geometry g;
+    if (ioctl(fd, B_GET_GEOMETRY, &g,
+        sizeof(device_geometry)) > 0)
+    {
+        if (g.device_type == B_CD) {
+            // it's a CD-ROM drive
+        } else {
+            // it's some other kind of drive
+        }
+    }
+
+See, ioctls are a piece of cake! But we're not done with
+them yet...
+
+Checking Media Status
+
+Next, let's figure out when the media inside a disk drive
+changes (this affects floppy drives, CD-ROM drives, and
+other drives with removable media). The way to do this is
+to have the Drive object periodically poll the driver for
+its status using an ioctl command that was custom-built
+for this purpose, B_GET_MEDIA_STATUS. For example, here's
+how you can tell if a new CD has been inserted into a
+CD-ROM drive:
+
+    int fd = ...; // this is the POSIX file descriptor for
+                  // the raw disk, obtained via open()
+    status_t mediaStatus;
+    if (ioctl(fd, B_GET_MEDIA_STATUS, &mediaStatus,
+        sizeof(status_t)) >= 0)
+    {
+        switch (mediaStatus) {
+        case B_DEV_MEDIA_CHANGED:
+            // new CD to scan
+            break;
+        default:
+            // something else happened
+            break;
+        }	
+    }
+
+One caveat here: the driver can only keep track of whether
+the media changed if the driver is kept open while the CD is
+removed and reinserted -- it forgets everything about its
+previous state when it is closed. So, for this to work, we 
+have to open the driver when the daemon starts, and keep it
+open while the daemon is running, which is what Drive Daemon
+does. For bonus fries, this also cuts down on the
+performance drawback to opening and closing the driver every
+time we need to check on the status of the drive.
+
+More information about removable media can be found in the
+following newsletter article:
+
+<http://www-classic.be.com/aboutbe/benewsletter/volume_II/
+Issue44.html#Insight>
+
+Checking Removable Drives
+
+Whereas checking the status of removable media is super-
+simple, checking to see whether a drive itself has been
+removed is a bit trickier. The technique hinges on the fact
+that, when a removable drive is unplugged from a bus, the
+corresponding device driver will republish its devices to
+indicate which devices are no longer available. Similarly,
+when a removable drive is plugged in, the driver must
+republish its devices to reflect the new additions to the
+system. This publish/unpublish methodology results in devfs
+entries being removed and added. So, you can't just keep
+querying your "raw" file to see whether the drive is
+removed, because the file might be swept out from under your
+feet.
+
+"But wait," I think I hear you say. "I can check to see
+whether files and directories are added or deleted on my
+hard drive by using the Node Monitor. Couldn't I just use
+this in the device hierarchy as well?" Indeed, you can do
+just that -- which is where the real power and beauty of
+devfs manifests itself!
+
+Let's look at the specifics. First of all, for those of you
+who think the Node Monitor is a diagnostic machine used by
+lymphologists, a bit of orientation: the Node Monitor is a
+service that the system provides to notify you when files
+or directories are added, deleted, move their location, or
+change their data. For a more complete description, I refer
+you, once again, to the Good Book:
+
+<http://www-classic.be.com/documentation/be_book/
+The%20Storage%20Kit/NodeMonitor.html>
+
+To use it, you need to call watch_node for every directory
+that you want to track. To see when entries get added or
+removed, we need to monitor all of the directories
+underneath /dev/disk. To pick up all of these directories,
+we start with /dev/disk and recursively walk down the
+directory structure from there, picking up directories as
+we go. Later, when we receive notifications that items are
+added or removed from one of these directories, we start
+or stop watching those items, respectively. It's a bit of a
+brute force method, but because devfs directory hierarchies
+tend to be deep but not broad, there's not too much of a
+performance penalty for all of this watching. See the code
+for more details.
+
+Conclusion
+
+Having gone through all the trouble of learning this stuff,
+you may wonder what use you can put it to. The first,
+foremost, and most obvious use is for writing an
+automounter (i.e. what Tracker uses to mount volumes when
+media and disks are detected). But there are other more
+creative uses as well -- imagine popping up a CD window
+when a CD is inserted into a drive, or setting up an
+automated system for formatting and burning Compact Flash
+cards when they are plugged into your machine. 

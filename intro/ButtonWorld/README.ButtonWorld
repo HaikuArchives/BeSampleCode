@@ -1,0 +1,23 @@
+ButtonWorld Project README
+=========================
+
+ButtonWorld takes DropWorld and extends it further!  It adds two buttons to the window that demonstrate different behaviors and making custom buttons
+
+Files
+=====
+
+The archive should contain the following files:
+
+README.ButtonWorld	-- This file
+ButtonWorld.proj		-- Metrowerks project file
+ButtonWorld.rsrc		-- Application resource file
+makefile				-- project makefile
+
+ButtonWorld.cpp		-- Source files
+ButtonWorld.h		
+ButtonWindow.cpp
+ButtonWindow.h
+ButtonView.cpp
+ButtonView.h
+Blue4x4.h
+Blue4x4on.h

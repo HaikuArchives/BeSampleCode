@@ -1,0 +1,162 @@
+DEVELOPERS' WORKSHOP: Script the Vote!
+By Stephen Beaulieu -- <hippo@be.com>
+
+"Developers' Workshop" is a weekly feature that provides
+answers to our developers' questions, or topic requests.
+To submit a question, visit
+<http://www.be.com/developers/suggestion_box.html>.
+
+A Yahoo Online survey became quite a topic of interest and
+discussion here at Be last Thursday. Our friends at Yahoo
+posted a survey asking readers to vote for their favorite
+operating system from the following choices: Windows, Mac
+OS, Unix, BeOS, PalmPilot, and Nintendo 64. As a company we
+were gratified that our OS was listed specifically,
+especially when other popular choices were stuffed into a
+generic Unix category. We were a bit puzzled, though, with
+the results that first appeared.
+
+With roughly 50,000 votes cast the Mac OS was leading the
+pack by a large margin. The breakdown was Mac OS 62%, Unix
+19%, BeOS 9%, Windows 7%, Nintendo 64 2%, and PalmPilot 0%.
+This seemed odd, given market realities.
+
+On closer examination we discovered that there was no limit
+to the number of times that a given person or machine could
+vote in the poll. Yahoo had no "One Person, One Vote"
+security in place. In short, stuffing the ballot box was, if
+not legal, certainly possible.
+
+Since the policy seemed to be "Vote Early, Vote Often," and
+the Mac Evangelists had more than a three-day head start in
+stuffing the ballot box, we decided to take drastic action.
+The "Script the Vote" campaign was born.
+
+Early in the campaign we got tired of the "Tally My Vote"
+--> "Back Button" --> "Tally My Vote" strategy. At least, we
+got tired of doing this by hand. But since the BeOS in
+general, and NetPositive in particular, is highly
+scriptable, we soon gave our mouse fingers a break.
+
+Here is the original script submitted by the engineer in
+charge of scripting:
+
+ "Try this script: (It's more complex than hoped because of
+  some goofy behavior in the "Back" button of NetPositive).
+  This assumes that the window in question is the first NP
+  window and that the radio_button for the BeOS is already
+  selected."
+
+  i=0
+  while true
+  do
+    i=`expr $i + 1`
+    echo "iteration $i"
+    doo NetPositive set Value of View 6 of View 0 View 4 of
+      View 1 of Window 0 to 1 > /dev/null
+    sleep 6
+    doo NetPositive set Value of View "back" of Window 0 to
+      $i > /dev/null
+    sleep 4
+  done
+
+This significantly improved our voting rate, and freed our
+engineers to deal with other, possibly more important,
+issues. But it didn't seem to satisfy the more rabid ballot
+stuffers on staff. Further investigation revealed that the
+survey itself was managed through an HTTP GET request. In
+other words, all the voting information was contained in the
+URL itself. Simply scripting NetPositive to constantly hit
+the Reload button increased speed dramatically.
+
+But it *still* wasn't good enough for some of us. If it was
+just a matter of submitting a URL, why not write a
+full-fledged voting application? So, while I started working
+on the VoteBe app, Ficus Kirkpatrick took another crack at a
+scripting solution. He wrote a bash script that launched
+multiple copies of lynx, the text-only browser, and
+submitted requests.
+
+Those of you in the know might realize that there is no port
+of lynx for the BeOS. We must in all honesty reveal that at
+this stage of the game much of our voting came from five or
+so Linux boxes floating around the company. The same script
+would have worked wonders on the BeOS, if a version of lynx
+had been available.
+
+At this point we were, through our various enterprises,
+submitting BeOS votes at a rate of 60-70 a second. Needless
+to say, our percentage of the pie increased greatly (just
+over 20% at its peak).
+
+But all good things must end, and as is often the case, our
+VP of Sales and Marketing, Alex Osadzinski -- ever the voice
+of maturity and reason at Be -- was the killjoy. (Hi, Alex
+8^) He noted with some unease that "Le Grand Fromage" would
+probably be displeased with our morning's efforts, and that
+perhaps our energies would be better spent elsewhere. We
+assented, and turned our attention to voting for Nintendo 64
+(still a measly 2% of the vote at this time). This was not
+exactly what Alex had in mind, but nobody gets their way all
+the time.
+
+So now Nintendo 64 picked up quite a bit of momentum. After
+an hour of voting it had about 17% of the pie. Then disaster
+struck: Yahoo's voting server became unresponsive.
+Connections had slowed down as time went on, but now we
+could get nothing. Fearful that we had crashed Yahoo's
+server, we pulled our voters away from the ballot boxes and
+went back to work.
+
+An hour or so later we happened to check the site again and
+discovered to our surprise that others had also championed
+the cause of Nintendo 64. The N64 vote was at 30%, with the
+Mac OS down to 31%. N64 was so close to becoming the
+Internet OS of choice that we mobilized the voters again to
+push it over the top.
+
+We did end up pushing the Nintendo 64 platform to 38%, ahead
+of the Mac OS, but it appears that Yahoo has adjusted their
+figures to compensate for our ballot stuffing. You can view
+the final results here:
+
+<http://features1.yahoo.com/survey/tally?Dir=3Dsurvey&Tmpl=3D19980413.html&I=
+d=199804
+13&Count=5&MaxWidth=100&Strip=1>
+
+So, where was I during all of this? After the initial
+shutdown of the Yahoo server, I stopped doing real work on
+my VoteBe application. I had a very primitive version that
+submitted votes to the PoorMan server running on my BeBox.
+It worked. When we started up the voting again I used it for
+awhile, but it was never distributed to the company as a
+whole.
+
+But, with my Newsletter article deadline looming, I decided
+that this was a fun story to tell and that, after beefing it
+up a bit, my voter application would make a fine bit of
+basic sample networking code. So, point your favorite ftp
+client to...
+
+<ftp://ftp.be.com/pub/samples/network_kit/VoteOften.zip>
+
+...and download this example of how to write a simple,
+threaded BeOS networking application. (Note that the use of
+this program and its derivatives should be reserved for
+special voting occasions. It is very uncool to use software
+like this to pound a server that has not asked for it. Be
+kind and don't try this one at home.)
+
+On an entirely different subject, I want to remind you that
+Be is still looking for qualified engineers to fill many
+different positions. A full listing of available jobs can be
+found at <http://www.be.com/aboutbe/jobs/index.html>.
+
+Note especially that we are still looking to fill a DTS
+Engineering position. As you can guess from the vote-o-rama
+story, this is a very serious place to work.
+
+I'll be back in four to six weeks with more sample code. In
+the meantime, enjoy our regularly scheduled Developer
+Workshops, and look for the first article from our newest
+DTS Engineer, Michael Morrissey, sometime very soon.

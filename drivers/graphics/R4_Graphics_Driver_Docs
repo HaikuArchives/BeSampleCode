@@ -1,0 +1,277 @@
+General Overview
+
+Starting with Release 4, drivers for graphics devices have been split into two pieces: a kernel driver and a user-space accelerant.  In the simplest terms, the kernel driver is responsible for interrupt handling and shared resource management.  The accelerant handles the rest of the responsibilities for the device, including video mode setup and hardware acceleration of rendering primitives.
+
+Like a standard kernel driver, the kernel driver for a graphics device is loaded and unloaded on demand, and there is at most only one copy of the driver loaded in memory at any time.  The user-space accelerant, in contrast, may be loaded into the address spaces of more than one program simultaneously.  The primary copy of the accelerant is loaded by the app_server when the device is opened, and is initialized with a call to the B_INIT_ACCELERANT hook function.  All other copies of the accelerant (ones used by regular applications for BWindowScreen or BDirectWindow acceleration) are initialized using the B_CLONE_ACCELERANT hook function.  Only the primary copy of the accelerant will be called on to set the video mode.  All other  features of the accelerant can be accessed from either the primary or secondary copies of the accelerant.
+
+
+The Kernel Driver
+
+Kernel drivers for graphics cards are ordinary kernel drivers.  Documentation for writing kernel device drivers is located elsewhere in the BeBook.  This section only documents the specific requirements of graphic device drivers.
+
+Naming Devices
+
+Graphic device drivers should export device names in the "/dev/graphics" directory.  You may choose any naming convention you wish as long as the convention allows for multiple identical devices in the system without adding another level to the directory heirarchy.  A useful convention is to combine the PCI vendor and device ids along with the bus, device, and function numbers for a particular device into a single identifier like so:
+
+sprintf(device_name, "%04x_%04x_%02x%02x%02x", vendor, device, bus, device, function);
+
+This method has the benefits of meeting the criteria without having to think too hard or keep track of the number of a particular kind of device that are installed in the system.  If you don't like this naming scheme, pick another one that works for you.  The app_server doesn't care what the name of the device is, it just walks the directory and uses whatever names it finds.
+
+Usage
+
+When the app_server goes to utilize a graphic device, it opens it read/write with the standard open() system call.  The app_server itself will only open the device once, no matter how many times the accelerant is cloned.  The file handle returned from a successfull open() will have a single ioctl() call with the opcode B_GET_ACCELERANT_SIGNATURE made to it.  The driver should return in the supplied buffer the file name of the accelerant which should be utilized with the opened device.  There is no requirement for all devices supported by the kernel driver to utilize the same accelerant, although that is the most common case.  The app_server loads and initializes the accelerant using the B_INIT_ACCELERANT hook function which takes as a parameter the opened file descriptor.  Any clones of the accelerant are initialized with the B_CLONE_ACCELERANT hook function.  Clones recieve their initialization parameters from the primary accelerant through the app_server via calls to the B_GET_ACCELERANT_CLONE_INFO hook function.  When the graphic device is no longer required, all of the accelerants are notified via calls to their respective B_UNINIT_ACCELERANT hook functions and finally the file descriptor for the device is closed using the standard close() system call.
+
+The details of the initialization and cloning processes, as well as the communication methods between the kernel driver and the accelerant, are private to the driver.  If there is a requirement for a cloned copy of the accelerant to communicate with the kernel driver via the ioctl() mechanism you should consider a multiple, rather than exclusive, open model for the device (remember that file descriptors can't be shared between arbitrary teams).  If you go the multiple open route, you'll want to include the name of the underlying graphic device in the information that is returned from B_GET_ACCELERANT_CLONE_INFO so that the clone can open its own copy of the device.
+
+XXX Talk about creating the vertical blank semaphore.
+
+The Accelerant
+
+Accelerants are ordinary user-space add-ons, with the restriction that the add-on may not link against libbe.so or anything that requires it.  The reason for this restriction is that the add-on is loaded by the app_server and the app_server, for various reasons, can't link against libbe.so.  Accelerants may be written in any language you like, as long as the entry point and hook functions follow the "C" function calling semantics used in the BeOS and doesn't require libbe.so.
+
+The single exported entry point for an accelerant is the get_accelerant_hook() function.  get_accelerant_hook() uses the uint32 feature identifier and possibly the feature specific information in the void *data to return a pointer to a function that performs the requested feature.  Any feature specific information required will be noted in the descriptions of the hook function.  Features with the high bit clear (i.e. feature ids from 0 through 0x7fffffff) are reserved for use by Be.  Features with the high bit set (i.e. feature ids from 0x80000000 through 0xffffffff) are reserved for use by the driver writer.  The current feature ids utilized by Be fall in to five general categories: initialization, video mode configuration, cursor managment, engine synchronization, and two-dimentional acceleration.  Future revisions of the API will add support for three-dimentional acceleration, as well as other categories of features being added to video cards.
+
+
+Initialization Hooks
+
+B_INIT_ACCELERANT  -  No feature specific data required.
+typedef status_t (*init_accelerant)(int fd);
+
+init_accelerant() is called by the app_server to initialize the primary copy of the accelerant, and will be called before any other hook functions.  Secondary copies of the accelerant are initialized with the B_CLONE_ACCELERANT hook clone_accelerant().  int fd is the file descriptor for the device in /dev/graphics that was opened for use with the accelerant.  init_accelerant() should determine through some private means that the accelerant and the driver are compatible to prevent driver/accelerant version mis-matches.  If initialization is successfull, init_accelerant() should return B_OK.  Returning anything other than B_OK will cause the accelerant to be unloaded without further calls to any code in the accelerant, so a failed initialization should release any and all resources it has allocated.  After successfull initialization, the accelerant should be prepared to configure display modes, manage the accelerator, etc.
+
+B_ACCELERANT_CLONE_INFO_SIZE  -  No feature specific data required.
+typedef ssize_t (*accelerant_clone_info_size)(void);
+
+accelerant_clone_info_size() returns the size in bytes of the amount of data that will be returned from the B_GET_ACCELERANT_CLONE_INFO hook, or an error condition indicating why it can not.
+
+B_GET_ACCELERANT_CLONE_INFO  -  No feature specific data required.
+typedef void (*get_accelerant_clone_info)(void *data);
+
+get_accelerant_clone_info() returns in the buffer pointed at by void *data the information required to create a secondary instance of the accelerant.  The buffer is owned and allocated by the calling application and is guaranteed to be at least as large as the size indicated by the return value of accelerant_clone_info_size().
+Both accelerant_clone_info_size() and get_accelerant_clone_info() may be called zero or more times, and they are not guaranteed to be called once for each cloned accelerant.
+
+B_CLONE_ACCELERANT  -  No feature specific data required.
+typedef status_t (*clone_accelerant)(void *data);
+
+clone_accelerant() is called to initialize secondary copies of the accelerant.  The void *data is a copy of the information retrieved via a call to the B_GET_ACCELERANT_CLONE_INFO hook.  The buffer should be considered read-only and should not be freed, as it's owned and managed by the calling application.  clone_accelerant() will be called only once for a particular instance of the accelerant.  Any information which needs to be shared by the primary and secondary copies of the accelerant should be maintained via some other mechanism, such as shared memory, kernel ports, etc.  If initialization is successfull, clone_accelerant() should return B_OK.  Returning anything other than B_OK will cause the accelerant to be unloaded without further calls to any code in the accelerant, so a failed initialization should release any and all resources it has allocated.  After successfull initialization, the cloned accelerant should be prepared to manage the accelerator, move the cursor, etc.
+
+B_UNINIT_ACCELERANT  -  No feature specific data required.
+typedef void (*uninit_accelerant)(void);
+
+uninit_accelerant() is called to terminate both primary and secondary copies of the accelerant.  All clones will have had their uninit_accelerant() function called before the primary accelerant is uinitialized.  Secondary accelerants should release whatever resources they have allocated, but should not otherwise interfere with the operation of the primary accelerant.  The primary accelerant should, in addition to releasing its resources, idle the accelerator engines and blank the display.  If the device supports it, the device and connected monitor should be placed into an "energy-usage-friendly" mode, as the display may be unused for some time.  It is likely, although not required, that the kernel device will be closed shortly after a call to the primary accelerant's B_UNINIT_ACCELERANT hook function.
+
+B_GET_ACCELERANT_DEVICE_INFO  -  No feature specific data required.
+typedef status_t (*get_accelerant_device_info)(accelerant_device_info *adi);
+typedef struct {
+	uint32	version;			/* structure version number */
+	char 	name[32];			/* a name the user will recognize the device by */
+	char	chipset[32];		/* the chipset used by the device */
+	char	serial_no[32];		/* serial number for the device */
+	uint32	memory;				/* amount of memory on the device, in bytes */
+	uint32	dac_speed;			/* nominal DAC speed, in MHz */
+} accelerant_device_info;
+
+get_accelerant_device_info() returns in the provided buffer various bits of information about the device being managed by the accelerant.  XXXX More Info Here.
+
+B_ACCELERANT_RETRACE_SEMAPHORE  -  No feature specific data required.
+typedef sem_id (*accelerant_retrace_semaphore)(void);
+
+accelerant_retrace_semaphore() should return the semaphore id of the semaphore that will be released each time the display enters the vertical retrace (or vertical blank, your choice) period.  The semaphore is usually created by the kernel driver when the device is opened, and ownership of the semaphore should be transfered at that time to the (first, if mutliple opens are supported) opening application (which is usually the app_server).  The function should return B_ERROR if vertical retrace notification is not supported.
+
+Mode Configuration
+
+B_ACCELERANT_MODE_COUNT  -  No feature specific data required.
+typedef uint32 (*accelerant_mode_count)(void);
+
+accelerant_mode_count() returns the number of "built-in" display_modes the driver supports.  This count may not be the total number of display_modes the device supports.  It's purpose is to allow the caller to create an appropriately sized array of display_modes so it can be filled by the B_GET_MODE_LIST hook.
+
+B_GET_MODE_LIST  -  No feature specific data required.
+typedef status_t (*get_mode_list)(display_mode *list);
+
+get_mode_list() copies the number of display_mode structures indicated by accelerant_mode_count() into the buffer pointed at by display_mode *list.  get_mode_list() returns B_OK if it successfully copied the mode list, and B_ERROR otherwise (an unusuall occurance).
+
+B_PROPOSE_DISPLAY_MODE  -  No feature specific data required.
+typedef status_t (*propose_display_mode)(display_mode *target, display_mode *low, display_mode *high);
+
+propose_display_mode() - XXXX describe how low and high limits are used.
+
+B_SET_DISPLAY_MODE  -  No feature specific data required.
+typedef status_t (*set_display_mode)(display_mode *mode_to_set);
+
+set_display_mode() configures the graphics device according to the display_mode.  If the mode can not be configured as desired, set_display_mode() should return an error.
+
+B_GET_DISPLAY_MODE  -  No feature specific data required.
+typedef status_t (*get_display_mode)(display_mode *current_mode);
+
+get_display_mode() returns in the buffer pointed at by current_mode the display_mode that the graphics device is currently configured for.  It should return an error if the device has not yet been configured.
+
+B_GET_FRAME_BUFFER_CONFIG  -  No feature specific data required.
+typedef status_t (*get_frame_buffer_config)(frame_buffer_config *a_frame_buffer);
+typedef struct {
+	void	*frame_buffer;		/* pointer to first byte of frame buffer in virtual memory */
+	void	*frame_buffer_dma;	/* pointer to first byte of frame buffer in physical memory for DMA */
+	uint32	bytes_per_row;		/* number of bytes in one virtual_width line */
+								/* not neccesarily the same as virtual_width * byte_per_pixel */
+} frame_buffer_config;
+
+get_frame_buffer_config() returns information about the current configuration of the frame buffer.
+
+B_GET_PIXEL_CLOCK_LIMITS  -  No feature specific data required.
+typedef status_t (*get_pixel_clock_limits)(display_mode *dm, uint32 *low, uint32 *high);
+
+For the provided display_mode, get_pixel_clock_limits() returns the minimum and maximum supported pixel clocks that the device is capable of generating useful output for.
+
+B_GET_TIMING_CONSTRAINTS  -  No feature specific data required.
+typedef status_t (*get_timing_constraints)(display_timing_constraints *dtc);
+typedef struct {
+	uint16	h_res;			/* minimum effective change in horizontal pixels, usually 8 */
+	uint16	h_sync_min;		/* min/max horizontal sync pulse width in pixels, a multiple of h_res */
+	uint16	h_sync_max;
+	uint16	h_blank_min;	/* min/max horizontal blank pulse width in pixels, a multiple of h_res */
+	uint16	h_blank_max;
+	uint16	v_res;			/* minimum effective change in vertical lines, usually 1 */
+	uint16	v_sync_min;		/* min/max vertical sync pulse width in lines, a multiple of v_res */
+	uint16	v_sync_max;
+	uint16	v_blank_min;	/* min/max vertical blank pulse width in lines, a multiple of v_res */
+	uint16	v_blank_max;
+} display_timing_constraints;
+
+get_timing_constraints() returns the step size and granularity for the various parameters that drive the CRTC.  This information is useful to display configuration applications like the Screen preferences panel for creating a display_mode that the driver is likely to accept.
+
+B_MOVE_DISPLAY  -  No feature specific data required.
+typedef status_t (*move_display_area)(uint16 h_display_start, uint16 v_display_start);
+
+move_display_area() configures the device to display the pixel at h_display_start,v_display_start as the pixel from the virtual frame buffer shown in the top left corner of the screen.
+
+#if NEW_FOR_R4.1
+B_GET_MOVE_DISPLAY_CONSTRAINTS  -  No feature specific data required.
+typedef status_t (*get_move_display_constraints)(display_mode *dm, uint32 *pixels, uint32 *lines);
+
+For the specified display_mode, return the smallest number of pixels the display can be moved in the horizontal direction and the smallest number of lines the display can be moved in the vertical direction.  This is essentially the granularity of the move_display_area() feature.
+#endif
+
+B_SET_INDEXED_COLORS  -  No feature specific data required.
+typedef void (*set_indexed_colors)(uint count, uint8 first, uint8 *color_data, uint32 flags);
+
+For 8bpp indexed color modes, set the specified range of indexed colors to their corresponding RGB tripples.  count ranges from 1 to 256. first is the zero-based index of the first color to set.  color_data is a pointer to (3*count) bytes of data interpreted as a group of red-green-blue tripples.  flags is currently unused.
+
+B_DPMS_CAPABILITIES  -  No feature specific data required.
+typedef uint32 (*dpms_capabilities)(void);
+enum {	/* power saver flags */
+	B_DPMS_ON = 1 << 0,
+	B_DPMS_STAND_BY = 1 << 1,
+	B_DPMS_SUSPEND = 1 << 2,
+	B_DPMS_OFF = 1 << 3
+};
+
+dpms_capabilities() returns a mask that identifies what DPMS capabilities the graphics device supports.
+
+B_DPMS_MODE  -  No feature specific data required.
+typedef uint32 (*dpms_mode)(void);
+
+dpms_mode() returns the DPMS mode the device is currently in.
+
+B_SET_DPMS_MODE  -  No feature specific data required.
+typedef status_t (*set_dpms_mode)(uint32 dpms_flags);
+
+set_dpms_mode() set the DPMS mode to the one specified in dmps_flags.  Only one bit in the flags should be set.  If more than one bit is set, the driver may arbitrarily choose which of the requested modes to use.  set_dpms_mode() returns B_OK if the requested mode could be set, otherwise it returns an error.
+
+Cursor Managment
+
+B_SET_CURSOR_SHAPE
+typedef status_t (*set_cursor_shape)(uint16 width, uint16 height, uint16 hot_x, uint16 hot_y, uint8 *andMask, uint8 *xorMask);
+
+Define the cursor - swipe info from R3 docs.
+
+B_MOVE_CURSOR
+typedef void (*move_cursor)(uint16 x, uint16 y);
+
+Move the cursor such that the hot spot location defined in the set_cursor_shape() hook is at the specified coordinates.
+
+B_SHOW_CURSOR
+typedef void (*show_cursor)(bool is_visible);
+
+Enable display of the hardware cursor if is_visible is true, otherwise disable display.  It is not the job of the accelerant to keep track of any visibility "nesting".
+
+Engine Synchronization
+
+B_ACCELERANT_ENGINE_COUNT  -  No feature specific data required.
+typedef uint32 (*accelerant_engine_count)(void);
+
+Return the number of acceleration engines that the device may operate in parallel.  It's not required for all engines to be equally capable (i.e. support the same acceleration features).
+
+B_ACQUIRE_ENGINE  -  No feature specific data required.
+typedef status_t (*acquire_engine)(uint32 capabilities, uint32 max_wait, sync_token *st, engine_token **et);
+
+Request exclusive ownership of an acceleration engine with the capabilities mask specified.  The caller is willing to wait up to max_wait micro(milli?)-seconds.  If the request can't be fullfilled before that time expires, the accelerant should return B_WOULD_BLOCK immediatly.  If non-zero, sync_token points to a synchronization token retrieved from either release_engine() or get_sync_token() to which the engine should be synchronized before engine acquisition succeeds.  See B_SYNC_TO_TOKEN for more details.  The engine_token for the successfully acquired engine is returned in engine_token **et.
+
+XXXX Needs to be fleshed out quite a bit.
+
+
+B_RELEASE_ENGINE  -  No feature specific data required.
+typedef status_t (*release_engine)(engine_token *et, sync_token *st);
+
+Relinquish exclusive ownership of the engine specified by engine_token et.  If sync_token *st is non-zero, return a sync_token which can be utilized to ensure that the specified engine has completed all acceleration operations issued up this point in time.
+
+B_WAIT_ENGINE_IDLE  -  No feature specific data required.
+typedef void (*wait_engine_idle)(void);
+
+Wait for the graphics device to be completely idle (i.e. no current running or pending acceleration primitives, DMA transfers, etc.).
+
+B_GET_SYNC_TOKEN  -  No feature specific data required.
+typedef status_t (*get_sync_token)(engine_token *et, sync_token *st);
+
+Return a synchronization token for the specified engine.  sync_token *st must point at a sync_token which will be updated with the information required to ensure that a call to sync_to_token() will
+be able to ensure that the specified engine has completed all of the acceleration primitives, DMA transfers, etc. that have been issued up to this point in time.
+
+B_SYNC_TO_TOKEN  -  No feature specific data required.
+typedef status_t (*sync_to_token)(sync_token *st);
+
+Ensure that the engine specified in sync_token *st has completed the acceleration primitives, DMA transfers, etc., issued up to the point in time specified in the sync_token.
+
+2D Acceleration primitives
+
+All 2D acceleration primitives take as their first parameter a pointer to an engine which has been aquired by the calling application.  The get_acceleration_hook() entry point's void *data must point to a valid display_mode for the device for which the return acceleration feature hook will be used.  This is the accelerant's opportunity to return a hook function customized for the specified display mode (perhaps one that is sensitve to the pixel configuration, etc.)
+
+B_SCREEN_TO_SCREEN_BLIT  -  display_mode for which the function will be utilized.
+typedef void (*screen_to_screen_blit)(engine_token *et, blit_params *list, uint32 count);
+typedef struct {
+	uint16	src_left;	/* guaranteed constrained to virtual width and height */
+	uint16	src_top;
+	uint16	dest_left;
+	uint16	dest_top;
+	uint16	width;	/* 0 to N, where zero means one pixel, one means two pixels, etc. */
+	uint16	height;	/* 0 to M, where zero means one line, one means two lines, etc. */
+} blit_params;
+
+Move the specified list of rectangular regions from one location in the frame buffer to another in the order they are specified in the blit_params *list.  The list is uint32 count elements in length.
+
+B_FILL_RECTANGLE  -  display_mode for which the function will be utilized.
+typedef void (*fill_rectangle)(engine_token *et, uint32 color, fill_rect_params *list, uint32 count);
+typedef struct {
+	uint16	left;	/* guaranteed constrained to virtual width and height */
+	uint16	top;
+	uint16	right;
+	uint16	bottom;
+} fill_rect_params;
+
+Fill the specified list of rectangular regions with the specified color.  The list is uint32 count elements in length.  The rectangular regions are inclusive.  The uint32 color is specified in the same configuration and byte order as the current display_mode.  All coordinates in the list of rectangles is guaranteed to have been clipped to the virtual limits of the display_mode.
+
+B_INVERT_RECTANGLE  -  display_mode for which the function will be utilized.
+typedef void (*invert_rectangle)(engine_token *et, fill_rect_params *list, uint32 count);
+
+Invert (perform a logical NOT) on the contents of the specified list of the rectangular regions.  The list is uint32 count elements in length.
+
+B_FILL_SPAN  -  display_mode for which the function will be utilized.
+typedef void (*fill_span)(engine_token *et, uint32 color, uint16 *list, uint32 count);
+/*
+	The uint16 *list points to a list of tripples:
+		list[N+0]  Y co-ordinate of span
+		list[N+1]  Left x co-ordinate of span
+		list[N+2]  Right x co-ordinate of span
+	where N is in the range 0 to count-1.
+*/
+
+Fill the specified list of span lines with the specified color.  The list is uint32 count span lines in length.  Each span line is described by three uint16 sized values: the vertical coordinate value common to both endpoints of the line followed by the left and then right horizontal coordinates of the endpoints of the line.
+
+

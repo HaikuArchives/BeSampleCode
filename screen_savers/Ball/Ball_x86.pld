@@ -1,0 +1,17 @@
+NAME=Ball_x86
+TARGETNAME=Ball
+PLATFORM=R5
+SCM=hg
+SYSTEMINCLUDE=/boot/develop/headers/be
+SYSTEMINCLUDE=/boot/develop/headers/cpp
+SYSTEMINCLUDE=/boot/develop/headers/posix
+SYSTEMINCLUDE=/boot/develop/lib
+SYSTEMINCLUDE=/boot/beos/system/lib
+RUNARGS=
+CCDEBUG=no
+CCPROFILE=no
+CCOPSIZE=no
+CCOPLEVEL=3
+CCTARGETTYPE=0
+CCEXTRA=-Woverloaded-virtual -funsigned-bitfields -Wwrite-strings 
+LDEXTRA=

@@ -1,0 +1,23 @@
+BeBounce Project README
+=======================
+
+This project demonstrates interapplication communication. When the application
+starts, a ball bounces in a window. By starting another copy, the ball can
+bounce between the two applications.  
+
+Files
+=====
+
+The archive should contain the following files:
+
+README.BeBounce		-- This file
+BeBounce_ppc.proj		-- PPC project file
+BeBounce_x86.proj		-- Intel project file
+makefile		-- project makefile
+BeBounce.rsrc		-- Application resource file
+
+main.cpp		-- Source files
+main.h
+Crunch.cpp
+Crunch.h
+

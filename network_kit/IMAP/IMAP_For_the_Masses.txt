@@ -1,0 +1,35 @@
+From RFC to API ASAP (or at least RSN)
+by Adam Haberlach
+---
+
+	I get a fairly large amount of mail--between work mail, private mail, automated bug reports, correspondence with old friends, and those unsolicited advertisements that we all love so much.  I seperate the work and private mail by using two different accounts.  At work, I use BeMail and use queries to break it down (usually the breakdown is between "Unread" and everything else).  At home, I will confess that I store my mail on my headless Linux machine, filter it with procmail, and read it with mutt (via telnet from my BeOS machine, of course).  Why?  Because I can connect to the machine from anywhere on the planet (at least anywhere that I can use ssh to get through Brian's gestapo firewall) and read my mail remotely.
+
+	This is a product of the way that mail is usually handled.  One of the older mailbox protocols on the net is POP, or Post Office Protocol.  It is simple and reliable, but it is really only designed to let your mail be stored on the server temporarily until you can download it and read it.  There isn't any provision for storing messages on the server, much less sorting, categorizing, or shuffling them.
+
+	Enter IMAP -- the Internet Message Access Protocol.  Designed and proposed in late December of 1996, it provides an interface for remotely storing and retriving E-mail messages.  However, since it is rather complicated compared to POP, it does not seem to be widely implemented.  At least not on BeOS, the only operating system that really matters in this context.
+
+	An Internet protocol is usually defined in a "Request for Comment," or RFC.  This document is a proposal by someone that explains the goals of their protocol and methods for implementation.  IMAP version 4 is documented in RFC 2060, available at http://sunsite.auc.dk/RFC/rfc/rfc2060.html, and finer RFC mirrors everywhere.  It may help you to read along.
+
+	I started this project with the goal of creating a set of objects that I could use to represent the bits of data and processes that need to be shuffled around in order to deal with IMAP.  I looked through the specification to determine the best way to break down the process into units of information and the processes that can be done to them.  After scanning through the RFC, I came up with something like the following group of objects.  I will list them in simplest to most ocmplex order, because many of them are defined in terms of each other and I wish to avoid forward declarations.
+
+** Flag
+	IMAP messages and mailboxes can have a set of flags associated with them.  These can be used both by the user and by the system.  In addition, flags can either be "permanent" in which case they will be preserved from session to session, and "temporary" in which case they will only be valid during the current session.  Other then that, there isn't much to do with a flag object, except own it.
+
+** Message
+	IMAP messages consist of an RFC-822 (you know where to look it up) or MIME message, with an associated 32-bit unique identifier.  The server must be capable of providing several different representations of the message.  For now, this system just deals with the raw message.  Somewhere around here are a set of classes for parsing messages, but they don't belong to me.  I'll pressure the author or something.
+
+** Mailbox
+	IMAP mailboxes contain lists of messages, as well as a unique "validity ID" used to avoid collisions.  The server also provides a "Next UID" which can be used by clients to create new messages.  I simply use a BList to keep track of the messages (or at least the Message IDs) in the mailbox.  In addition, mailboxes can be heirarchial--but I have chosen not to implement this feature of IMAP for the time being.
+
+** Connection
+	This is where the magic happens.  A Connection is responsible for connecting to the server, logging in, handling the listing of mailboxes and their messages, and eventually the downloading of message bodies.  It needs to know information like the hostname, username, and password.  It also maintains lists of mailboxes, as well as an API for dealing with them.  This is the most complicated object, containing functions for opening a network stream, composing requests, and parsing the results.  It also uses a BList of Mailbox objects to track the boxes for the current session.
+
+	An IMAP transaction consists of a request tagged with an ID, followed by one or more reponses from the server terminated with a final response which is tagged with the original tag from the request.  The tag can be any set of alphabetic or numeric characters, and should be different for every transaction.  The IMAPConnection class has a private function to generate tags based on a counter, by appending the counter's value to the word "KRIMEZ" (for historical reasons) and then incrementing the counter.  A typical transaction works a bit like this:
+
+Client sends a request tagged with a string:			KRIMEZ3 LIST "" *
+Server responds with an untagged response:			* LIST (\NoInferiors) NIL INBOX
+Server ends the transaction with the tagged response	KRIMEZ3 OK LIST completed
+
+	IMAP servers are allowed to respond with any set of valid responses they wish.  This means that the parser must be able to deal with just about anything, and figure out quite a bit based on its idea of the current state of the connection.  In this case, I have chosen to have a single function, HandleResponse() be called after every command is sent.  The function reads lines from the network stream and deals with them until it detects a tagged response.  Each line is identified and delt with accordingly.  Many commands are simply ignored, as they require no acknowledgement and we are not interested in them.  Some commands contain information, which we grab, parse, and store.
+
+	After that, this project is pretty much just a parser and a network wrapper.  I am running out of space, so I'll hope that the code speaks for itself.

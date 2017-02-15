@@ -1,0 +1,115 @@
+Useful Applications of BeOS scripting
+Jeff Bush
+
+Contrary to its name, BeOS message scripting doesn't refer 
+to a scripting language such a Perl or Awk.  BeOS scripting 
+is a format for passing messages between applications.  Your 
+programs already support scripting as many classes in the 
+interface kit have it built in.  The really interesting 
+aspect of scripting is that applications can interoperate 
+without necessarily having to be specially designed to work 
+together.  The sample app, Thesaurus demonstrates this 
+principle.
+
+Thesaurus lets you scan through text that displayed
+by some other application, and replace words with their 
+synonyms.  Ok, it's not totally useful (unless you're 
+writing a college paper maybe!), but it is mildly 
+entertaining, and the code could easily be adapted to 
+work as a spelling checker or similar application.   The 
+synonyms are taken from a file that's included in the 
+optional/goodies folder on the R4 CD.
+
+The basic operation of this application is relatively 
+simple.  BTextView has a property named "Text" which gives 
+you access to the contents of the text view.  This 
+application reads some text, scans for a word that it has 
+synonyms for, presents the list of choices to the user, and 
+then sets the text depending on what the user chooses.  
+Unfortunately, the text view scripting messages used by 
+Thesaurus don't yet belong to a suite, so if you try this 
+with a program such as Eddie or BeIDE, you may find that it 
+doesn't work.
+
+   One problem I ran into was how to find out which 
+application Thesaurus should talk to.  An easy way to do it 
+was to allow the user to drag an icon onto the app.  The 
+message that is dragged is just bogus.  When the view in 
+question receives it, it won't know how to handle it and 
+will reply with B_MESSAGE_NOT_UNDERSTOOD.  The returned 
+message, however, will have a messenger to the view in 
+question which we can use to talk to the app.  This worked 
+fine for BeMail, but unfortunately StyledEdit doesn't accept
+dropped messages.  To solve this problem, I've added 
+optional command line apps that can be used to manually 
+select a target.  In the case of StyledEdit, you can use the 
+optional command line arguments as follows:  
+"Thesaurus --app StyledEdit --window 0 --view text"
+
+   The meat and potatoes of Thesaurus is in the
+RemoteTextScanner class.  It handles communication with
+the targeted text view.  The actual work for getting the 
+text is done in FetchNextTextChunk(), which fetches 1k of 
+text from the targeted text view.  BTextView has a property 
+called "Text" which represents text that it contains.  You 
+can use an index specifier to choose which text you get 
+back.   The following code retrieves a chunk of text that 
+starts at fTextBufferOffset and is TEXT_BUFFER_SIZE long:
+
+	BMessage textRequestMessage(B_GET_PROPERTY);
+	textRequestMessage.AddSpecifier("Text", fTextBufferOffset,
+		TEXT_BUFFER_SIZE);
+	fTextViewMessenger.SendMessage(&textRequestMessage, &reply);
+	if (reply.FindString("result", &text) == B_OK)
+		strncpy(fTextBuffer, text, TEXT_BUFFER_SIZE);
+
+   That's it.  Replacing the targeted word is almost as easy.
+In this case, we change the verb to B_SET_PROPERTY.  It is 
+then a two step process of removing the old text and 
+inserting the new:
+
+	// Erase the word that is going to be replaced
+	BMessage reply;
+	BMessage textDelMessage(B_SET_PROPERTY);
+	textDelMessage.AddSpecifier("Text", fCurrentWordOffset,
+		fCurrentWord.Length());
+	fTextViewMessenger.SendMessage(&textDelMessage, &reply);
+
+	// Now insert the new word beginning at the same location
+	BMessage textSetMessage(B_SET_PROPERTY);
+	textSetMessage.AddString("data", newWord);
+	textSetMessage.AddSpecifier("Text", fCurrentWordOffset,
+		strlen(newWord));
+	fTextViewMessenger.SendMessage(&textSetMessage, &reply);
+
+  The TextView also has a "selection" property, which, as
+you might guess, allows us to change what text is selected.
+My plan was to set the selection to the currently selected
+word, so the user could see it in its context.  This is
+where I ran into a little snag.  It turns out that when the
+window containing a text view doesn't have the focus, the
+selection isn't highlighted.  Since the thesaurus window
+has the focus when you're changing words, this won't work.
+Luckily, the text view also has a property called
+'text_run_array'.  This property contains raw information
+about the font and color of text in the view, so it was a
+simple matter of setting the color of the word to red to
+indicate which word is currently being scanned.  Note that 
+this only works when multiple colors/fonts are enabled for 
+the view, however, in most cases where you would want to use 
+this app, they are.
+
+  There's quite a bit of room for improvement
+in this application:  You could modify it to work within a
+selection by getting the selection property
+from the text view before starting, or improve the
+UTF8 support (BTextView does
+utilize UTF8, so fixing this should be simple). 
+
+  I hope this gets your creative juices flowing
+in thinking of ways to make applications more scriptable.
+The scripting mechanism is still evolving, so if you
+have ideas for new properties or suites, you can submit
+requests using the bug database.
+
+

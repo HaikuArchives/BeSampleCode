@@ -1,0 +1,130 @@
+Modal Muddle
+
+In my last newsletter article, I created an application, Doodle, which illustrated differences between the Be way of doing things and the Windows way. A few days after the article was released, I was approached by a Ms. Morgan le Be, BeOS hacker and mistress of the black arts.
+
+"I'm a little disappointed with the way you approached modal dialogs," she said. There's only one kind of tidings that Morgan brings, and this visit was no exception.
+
+"Ah, but I used the same kind of scheme MFC applications use, and what's more, I used the same approach BAlert does, so it should work fine!" I retorted hotly.
+
+"Just take a look at your fiendish creation," she said smugly. So I did. Once I had launched Doodle, she pointed at the Pen Widths dialog. "Try dragging that dialog over your document window." I did so, and to my grief, the document window wasn't getting redrawn correctly! The document view was blank, and the menu and scroll bars showed garbage.
+
+Obviously something was wrong with the way I had done things. "What do you suggest, Morgan?"
+
+"Make the dumb thing asynchronous, silly. Instead of waiting for the dialog to finish, just pack its data into a BMessage and post that to the document."
+
+Well yes, I could have done this, but doing so would defeat my goal: to show how modal dialogs could be done in Be. Clearly, this attempt at modal dialogs was not going to satisfy our discerning audience of geeks. What follows is a grossly magnified look at that marvel of interface design: modal dialogs. I've revised Doodle slightly based on these few ruminations; the code, once again, is at:
+
+ftp://ftp.be.com/pub/samples/intro/doodle.zip
+
+This time I've added a MultiLocker class, and I've abstracted the modal processing loop into its own file, syncutil.cpp. More about this in a moment.
+
+User Behavior vs. Code Structure
+
+Before I commence, I want to clarify what I'll be discussing. In fact, there are two more-or-less orthogonal issues that are lumped together in the Windows conception of modal and modeless dialogs.
+
+The first issue is how the user interacts with the dialog. A dialog is modal when it prevents the user from performing a certain set of activities while it is being used. A dialog is modeless, on the other hand, when it imposes no restrictions on the user's activities. Of course, there is a continuum of possibilities here. By far the most common ones are: for modal, a dialog which prevents the user from working within any other application windows while the dialog is running, and for modeless, a dialog which allows the user to interact with all of the application windows while the dialog is running.
+
+The other issue is how the dialog is actually coded. There are two possibilities here: synchronous or asynchronous invocation. In a synchronous situation, one or more of your main threads blocks until the dialog is finished, at which point it picks up where it left off. There are varying degrees of synchronicity you can implement, depending on how many threads in your application you've blocked. In asynchronous behavior, one of your main threads invokes the dialog (by spawning a dialog thread, for instance), and then goes on its merry way. Later, the dialog informs you when it's finished, and you pick up where you left off when you invoked the dialog.
+
+In the MFC library, you don't really have a choice of which code structure to use -- modal dialogs are always invoked synchronously, and modeless dialogs are always invoked asynchronously. In the BeOS, however, these issues are separate. Modal/modeless behavior is implemented by creating a window with or without a modal 'feel,' but you have the choice of whether you want to block your thread (or threads) waiting for the dialog to finish (synchronous), or whether you want your thread to continue processing while the modal dialog is running and get the data in some other way (asynchronous).
+
+So, there are really two questions to address when coding dialogs on the BeOS:
+* Should your dialog be modal or modeless?
+* Should you use synchronous or asynchronous design when creating your dialog?
+
+Defending Modality
+
+First, let's address the question of modal vs. modeless dialogs. Some religious UI zealots crusade against the use of modal dialogs in applications, because they limit the user's options. At the risk of igniting a bloody UI jihad, I believe that modals are useful when it's desirable to limit the user's options. For instance, it might be useful to keep your user from closing a window and clobbering a document's data while you're waiting for the user to save the document.
+
+Modal dialogs can also help simplify interactions between the windows in your application.  If the dialog's data depends on the active window, it can be difficult tracking the dialog's data in a modeless situation, where different windows may be activated -- especially with Focus Follows Mouse turned on, where the focus often runs amok!
+
+At the same time, it's good to make dialogs that are as unintrusive as possible. The BeOS gives you quite a bit of control over just how 'modal' you want a window to be (whether it blocks a specific set of windows in an application, all of the windows in an application, or -- shame on you! -- the entire system).
+
+For further debate on this fascinating topic, please consult your local UI religious fanatic. Meanwhile, let's assume that you've decided to use modal dialogs. Now, we must consider how to design the dialog: synchronously or asynchronously?
+
+Syncrosimplicity
+
+Why are modal dialogs so popular in Windows? In a word, simplicity. Here's what you have to do to implement a modal, synchronous dialog:
+
+1. Throw an instance of a CDialog-derived class onto the stack.
+2. Stuff the dialog with the data you want it to be initialized with.
+3. Execute DoModal(). DoModal:
+	a) Initializes and starts the dialog.
+	b) Waits for the user to dismiss the dialog (the synchronous part).
+	c)  Returns a value which tells you the ID of the command (i.e. button) that was used to dismiss the dialog (e.g. IDOK, IDCANCEL).
+4. Grab the data from the dialog once it's finished.
+5. Get on with your life; the dialog is destroyed once you leave its scope.
+
+The nice things about this approach is that all of the synchronous dialog behavior is contained in one function call, and you get direct access to the dialog's data after it's done. It would be nice if we could apply that simplicity to modal dialogs on the BeOS as well. 
+
+The Fine Art of Doing Nothing
+
+The drawback to implementing synchronous dialogs is that you're blocking the calling thread. "But where's the problem there? When I'm running the modal dialog, my application doesn't do anything!" Unfortunately, that's not the case. Even if your background windows don't respond to activation, key down, mouse down, or other events, they may still need to respond to:
+1. Draw update events (if the modal dialog or other applications' windows move).
+2. Pulse events.
+3. Other user-defined events that may be delievered from other threads or applications.
+
+What happens if you block all of the threads in your entire application, ignoring all of these events? You get the Ultimate Modal Dialog: background tasks in your application stop, your windows don't get drawn correctly if you move windows from in front of them, and your message queue fills up (and may possibly overflow, in which case you'll lose some messages). Needless to say, this solution will earn you howls of derision from the modern computer sophisticate -- especially BeOS aficionados, who are used to having things happen Right Now, Where I Want It, and Not a Care About Anything Else in the World. It would be nice to be able to process these kinds of events while the synchronous dialog is running.
+
+Synchronicity Among Threads
+
+"Hm, I seem to remember that Windows applications only have one thread by default. Why, then, doesn't your application grind to a halt when you run a modal dialog in Windows?" Well, when you run a modal dialog in MFC, your thread actually doesn't block. Instead, it enters a special message processing loop (CWnd::RunModalLoop), continuing to dispatch messages to all of your needy windows, while your dialog runs. Needless to say, you probably have better things to do with your time than write a full-featured message processing loop, just to get synchronous dialogs implemented!
+
+The good news is, you don't have to jump through that hoop to get synchronous dialogs implemented in the BeOS. Because each window runs in its own thread, they can process messages independently of each other. On the other hand, since you're in a multithreaded situation, there are several synchronization issues to consider.
+
+In order to keep your app responsive while your modal dialog is running, here are three cases to consider when running a synchronous dialog in the BeOS:
+
+1. The calling thread is unrelated to your window and application threads (i.e. they don't share access to any data). In this case, doing a synchronous call will have no effect on the rest of your system, so you can relax.
+
+2. The calling thread is a window thread. In this case, just blocking the window thread would be bad since the window would no longer respond to messages or update events. At the bare minimum, you'll want the window to be able to draw itself. You can do this by telling the window to update itself periodically while you're blocking. (This is the same trick that BAlert uses; see WaitForDelete in syncutil.cpp for the not-so-gory details.)
+
+3. The calling thread is not a window thread, but one of your windows shares data with this thread. Your window will be able to run normally, but you need to make sure that it will be able to acquire access to the data it needs to perform its operations.
+
+Note that if the calling thread is a BLooper, then while it's blocking, it won't be able to process messages in a timely manner. At a minimum, this will cause delays in message processing and responding, and in the worst case, this can result in the message queue overflowing, and messages getting lost. It's up to you to determine whether this is an acceptable risk.
+
+Wherefore Doodle?
+
+Of the cases described above, Doodle falls into category 3. Recall that, in Doodle, there is the application thread, a thread for each window, and a thread for each open document. Also recall that, in the previous implementation of Doodle, access to the document's data was protected using the looper's lock.
+
+Let's take the simplified case where there's one application thread, one open window, and one open document. When Pen>Pen Widths is invoked synchronously, the document thread is the one that blocks. However, when it blocks, the window ceases to update correctly. Why?
+
+Well, there are two kinds of window events, occurring while the modal dialog is running, that depend on access to the document's data: (a) UpdateUI, which is called by the application thread's Pulse task to update the menu states, and (b) Draw, which the window's thread calls in response to window update events. Both of these functions attempt to access the document by locking the built-in looper lock before proceeding.
+
+But Pen>Pen Widths gets called from the document's MessageReceived, and the looper is automatically locked while handling messages. Thus, the document is locked for the entire duration of the synchronous dialog, so the windows block waiting for access to the document. The result? Window garbage.
+
+To the Locksmith
+
+The way around this problem in Doodle is to change the way the locking mechanisms work. First, let me show you how NOT to solve the problem. "Simple," I said at first. "I'll just unlock the document looper, run the dialog synchronously, and then relock the document looper afterwards. Nobody outside will know the difference, and once I've unlocked, the windows are free to play with the document."
+
+I asked Morgan le Be what she thought of this clever plan. "Nope," said Morgan. "What if the looper was locked multiple times before MessageReceived?" (It actually only seems to be locked once, but there's no guarantee that that will hold in future releases, or that I've handled all the possibilities!) Well, I could unlock multiple times and then relock the same number of times, but that's getting complicated. The lesson here is clear: Don't unlock something that you yourself didn't lock.
+
+In coming up with a better locking mechanism, I realized that: (a) the windows only need to read the data to draw it, and (b) the looper locking mechanism doesn't have to be associated with the document's data at all. I can solve this problem by introducing a new, separate lock for the document's data. For maximum flexibility, I'll implement the data lock by using a multiple reader/single writer lock, provided by Stephen in a recent Newsletter article:
+
+http://www.be.com/aboutbe/benewsletter/volume_II/Issue36.html#Workshop
+
+Now, although the looper is locked, the document's data is available for retrieval, and the windows can continue with their merry business.
+
+Asynchronous Dialogs
+
+As I mentioned before, an asynchronous dialog allows your thread to continue to function while the thread is blocked, which means that you don't have to worry so much about other threads waiting for you. However, getting data out of asynchronous dialogs is akin to normal asynchronous window communication, and is usually a bit more complicated than synchronous dialogs. What do you have to do when you create a asynchronous dialog?
+
+1. Create a persistent instance of a dialog  -- or, if it's already running (a possibility for modeless dialogs), find it and make it active.
+2. Stuff the dialog with the data you want it to be initialized with, and make sure the dialog knows who it's supposed to communicate with. You could hand the dialog a BMessage and a BMessenger to eliminate dependency between your application and dialog.
+3. Start the dialog using ShowWindow().
+4. Get on with your life, making sure that you're not doing anything behind the dialog's back that it doesn't expect or can't handle (the asynchronous part).
+5. When the dialog is ready to give you data, you need to find some way of getting the dialog's data. There are several ways to do this:
+	a) Have the dialog modify your data directly.
+	b) Have the dialog signal you when it's ready (e.g. via a message). You then grab the data directly from the dialog (assuming you know where it is in memory). Hopefully, nothing untoward happens to the dialog's data from the time it posts the message to the time you retrieve the data.
+	c) Have the dialog signal you when it's ready via a message, and have the dialog send you the new data in that message. It's a little tricky to do this in Windows, since you're only given WPARAM and LPARAM arguments to work with. By comparison, the BeOS gives you the BMessage class, which is often a quite convenient way of solving this problem.
+6. When the dialog's finished, send it a B_QUIT_REQUESTED message, and let it clean itself up. You could also Lock() and Quit() the dialog directly, but doing so could lead to deadlocks if the dialog uses locked, direct access to the target.
+7. If your target window or document gets destroyed, you'll probably wamt to destroy the dialog by sending it a B_QUIT_REQUESTED message. Again, you could lock and quit the dialog directly, but beware of deadlocks!
+
+For asynchronous dialogs, you create the dialog in a different place from where you handle it, and getting the data from the dialog requires a bit more thought. On the BeOS, however, you can use BMessages and BInvokers to get data back to your application and eliminate some of the dependency between the dialog and your application. For many people, Morgan included, this approach is actually simpler than worrying about thread blocking issues.
+
+Conclusion
+
+So, when should you use synchronous dialogs on the BeOS, and when should you use asynchronous? Here are some parting guidelines:
+
+* Use synchronous dialogs when you really want to stop your thread, keeping it out of trouble, until the dialog has finished. You might also consider synchronous dialogs if you crave simplicity in exchanging data between application and your dialog, particularly if your dialog contains data that can't easily be packaged into a BMessage. The drawback is: you need to keep your application responsive to update events, and possibly also pulse events and external messages, while your calling thread is blocked.
+
+* Otherwise, use asynchronous dialogs. They allow your calling thread to continue to be responsive, and when you use BMessage to exchange data, you can eliminate unwanted dependencies between your dialog and your application. The drawbacks are that data exchange is a bit trickier, especially if your data doesn't fit well into a BMessage.

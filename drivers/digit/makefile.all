@@ -1,0 +1,10 @@
+# makefile for all driver sample code
+
+LEAFDIRS = \
+	driver \
+	test
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

@@ -1,0 +1,362 @@
+Anatomy of a Translator
+Jon Watte <hplus@be.com>
+
+
+One of the many good things in version R3 of the BeOS was the 
+addition of system-wide translation services through the 
+Translation Kit. While translation between different data 
+formats was previously available in the form of a third-party 
+library named Datatypes, having a Kit in the BeOS makes it 
+easier to use and install, because you can assume it's always 
+there. The Translation Kit will load any old-style Datatypes 
+add-ons, but the interface used by Datatypes is deprecated.
+
+The actual work of translating data in the Translation Kit is 
+performed by add-ons known as Translators. This article will 
+explain what such a Translator add-on must do to be used by 
+the Translation Kit, and what it can do to be a well-behaved 
+citizen in the world of data format conversions.
+
+But first, the code! The archive can be found at:
+currently at:
+
+    ftp://ftp.be.com/pub/samples/translation_kit/ppm.zip
+
+The purpose of our Translator is to allow applications to 
+read and write the PPM bitmap file format. I chose PPM 
+because it is a format that is fairly simple to understand, 
+while having enough variation to illustrate how to configure 
+a Translator add-on. It is also a fairly popular format for 
+UNIX-style image processing tools.
+
+
+
+For translation to work, there has to be some common ground 
+between the translators, and the applications using them. 
+For bitmap graphics, this common ground is found in the 
+B_TRANSLATOR_BITMAP format, a format which is designed to be 
+easily readable and writable to BBitmap system objects. The 
+format of a B_TRANSLATOR_BITMAP formatted file is simple:
+
+First, there is the file header, which consists of a struct:
+
+struct TranslatorBitmap {
+	uint32		magic;		/*	B_TRANSLATOR_BITMAP	*/
+	BRect		bounds;
+	uint32		rowBytes;
+	color_space	colors;
+	uint32		dataSize;
+};
+
+As you can see, all elements of this struct are 32 bytes in 
+size (except for the BRect, but all elements in a BRect are 
+4 bytes in size) so there should be no alignment problems 
+when reading/writing this struct on different platforms. 
+However, the byte order needs to be well defined, and since 
+Datatypes was around long before the x86 port of BeOS, the 
+well-defined byte order of the TranslatorBitmap struct is 
+big-endian.
+
+The "magic" field should be set to the B_TRANSLATOR_BITMAP 
+constant, swapped to big-endian if necessary.
+
+The "bounds" field should be set to the Bounds() that a 
+BBitmap system object would use to contain the image. Note 
+that Bounds().right is ONE LESS than the width of the image 
+in pixels, because the 0-th pixel counts as one pixel. Again, 
+you need to swap the BRect members as necessary.
+
+For "rowBytes", see below.
+
+"colors" is one of the values defined in GraphicsDefs.h which 
+describe various ways you can interpret the raw pixel data. 
+In R4, there will be more values defined for a color_space, 
+although not all values work if you try to DrawBitmap() such 
+a bitmap to the screen -- in the sample source, we have 
+cribbed the definitions for B_CMYK32 and relatives from R4 so 
+that we cal illustrate how to convert between color spaces.
+
+"dataSize", lastly, should tell how much pixel data follows 
+the header, but the size of the header (32 bytes) does not 
+count. This should always be set as follows: 
+header.dataSize = (header.bounds.Width()+1)*header.rowBytes
+Again, be careful about byte swapping.
+
+After this struct follows directly the actual data of the 
+bitmap, from left to right, top to bottom, padded to rowBytes 
+bytes per scanline. rowBytes is typically the smallest 
+multiple of four bytes that will fit the width of the bitmap 
+of whole pixels across.
+
+The general rule with regards to byte-swapping is to only 
+swap when you need to read or write data, and keep it in the 
+native format internally; doing so will make sure that you 
+can easily access the values of the header. For instance, if 
+you were to write a BBitmap out in the B_TRANSLATOR_FORMAT 
+format, here's how you could do it:
+
+status_t WriteBitmap(BBitmap * map, BDataIO * out)
+{
+	TranslatorBitmap header;
+
+	/* prepare header */
+	header.magic = B_TRANSLATOR_BITMAP;
+	header.bounds = map->Bounds();
+	header.rowBytes = map->BytesPerRow();
+	header.colors = map->ColorSpace();
+	header.dataSize = header.rowBytes*(header.bounds.Width()+1);
+
+	/* swap header */
+	header.magic = B_HOST_TO_BENDIAN_INT32(header.magic);
+	header.bounds.left = B_HOST_TO_BENDIAN_FLOAT(header.bounds.left);
+	header.bounds.top = B_HOST_TO_BENDIAN_FLOAT(header.bounds.top);
+	header.bounds.right = B_HOST_TO_BENDIAN_FLOAT(header.bounds.right);
+	header.bounds.bottom = B_HOST_TO_BENDIAN_FLOAT(header.bounds.bottom);
+	header.rowBytes = B_HOST_TO_BENDIAN_INT32(header.rowBytes);
+	header.colors = (color_space)B_HOST_TO_BENDIAN_INT32(header.colors);
+	header.dataSize = B_HOST_TO_BENDIAN_INT32(header.dataSize);
+
+	/* write header */
+	status_t err = out->Write(&header, sizeof(header));
+
+	/* write data */
+	if (err == sizeof(header)) {
+		err = out->Write(map->Bits(), B_BENDIAN_TO_HOST_INT32(header.dataSize));
+		if (err == B_BENDIAN_TO_HOST_INT32(header.dataSize)) {
+			err = B_OK;
+		}
+	}
+	return (err > B_OK) ? B_IO_ERROR : err;
+}
+
+I have sloppily been saying "file format" above; the truth is 
+that any BPositionIO object can be used by a Translator, and 
+as long as you can Seek() and SetSize() and Read() and 
+Write() it, it needn't be a BFile proper. It can be one of 
+the system classes BMallocIO or BMemoryIO, or it can be your 
+own class which knows how to read and write data to some 
+special storage you're using. This is used by the system 
+class BBitmapStream, which knows how to present a BBitmap as 
+a "stream" of data.
+
+Now, your job as a bitmap image translator is to read data in 
+your "special" file format from the input stream, and write 
+it to the output stream in the "standard" bitmap format as 
+explained above. You should also be capable of doing the 
+reverse; reading data in the "standard" bitmap format, and 
+writing it out in your special format. This reading/writing 
+is done in the exported Translate() function. 
+
+Translate() is passed an input and output stream, type 
+information that a previous call to Identify() returned, 
+possibly a BMessage containing some configuration information 
+and out-of-bounds information, and a requested output format 
+type. This type is a four-letter type code as found in 
+<TypeConstants.h> and other system headers, and the specific 
+value is taken from your outputFormats[] array or the return 
+data from Identify(). If there is no type code defined for 
+the format you're dealing with, you have to make one up. When 
+you do, remember that Be reserves all type codes that consist 
+solely of uppercase letters, digits, the underscore character 
+and space. Your best bet is to use lowercase letters in your 
+own type codes.
+
+There are standar formats for some other kinds of data 
+besides bitmap images; if you look in <TranslatorFormats.h> 
+you will find them, and they are also described in the 
+Translation Kit chapter of the online BeBook.
+
+
+
+But there are some things that you need to do before the 
+Translation Kit can get to the point where it calls your 
+Translate() function. There are many translators installed in 
+a typical user's system, so how does it know which Translator 
+to use? Typically, you will be selected in one of two ways:
+
+1) An application that implements an "export" menu item, such 
+as the Becasso paint program, or the R4 version of ShowImage, 
+will call upon the Translation Kit to list all available 
+Translators, and select the Translators which say that they 
+can translate from the B_TRANSLATOR_BITMAP format to some 
+other format. It will then let the user choose one of these 
+translators using some UI (a dialog or menu, typically) and 
+then tell the Translation Kit to especially use the 
+translator so selected.
+
+For this to work, your translator needs to tell the world 
+about what formats it can read and write. It does so in the 
+inputFormats[] and outputFormats[] arrays. These are arrays 
+of struct translation_format, terminated by a format with all 
+0 values. While exporting these arrays is labeled "optional" 
+in the documentation, applications that want to perform an 
+export will not know about your Translator unless it does.
+
+Also note that there is no way to specify that only certain 
+combinations of input and output file formats are good; once 
+you declare some input formats and some output formats, any 
+combination thereof may be used by the Translation Kit, 
+including in some degenerate cases translating the SAME 
+format (i e B_TRANSLATOR_BITMAP to B_TRANSLATOR_BITMAP). You 
+decide how to best deal with this situation; just copying 
+from input to output is acceptable, although if your 
+Translator can also do some other tricks (like the color 
+space conversion of PPMTranslator) you might want to do that 
+even on same-format translations.
+
+2) An application that accepts "any file" and then uses the 
+Translation Kit to figure out what it was will cause your 
+Identify() function to get called. The role of your 
+Identify() function is to take a look at the beginning of the 
+file and figure out if it is in one of the formats you know 
+how to handle or not. Note that Identify() will often be 
+called before Translate() even if the application selects 
+your Translator specifically, so you have to do a good job 
+here.
+
+Because the BPositionIO you get passed for input may have 
+some special meaning, such as reading from a network socket, 
+you should not read more data than you need to make an 
+educated guess as to the format of data you're passed. 
+Similarly, calling Size() or Seek() relative the end-of-file 
+of the BPositionIO might be an expensive operation causing 
+the entire file to be downloaded to disk before it returns, 
+so it should be avoided in your Identify() function. Else it 
+might happen that you don't recognize the format, and then 
+the user wasted an hour on a 28.8 kbps download just to get 
+nothing useful out -- and some applications use the 
+Translation Kit only to identify what something is; they 
+don't go on to actually Translate() it. Wasting time getting 
+the end of the file is then doubly pointless.
+
+
+
+There are some more required data items you need to export 
+from your Translator for the Translation Kit to use it. They 
+tell the world about the name of your Translator, some 
+information about it, and the version. If there are two 
+Translators with the same name but different versions 
+installed, the Translation Kit may choose to only use the one 
+with the latest version, for instance. Thus, you should make 
+sure that you always bump the version number when releasing a 
+new version of your Translator, and to never change the name 
+of your Translator (as seen in "translatorName[]") once it's 
+set.
+
+"translatorInfo[]" is your personal little soap box, and is 
+a great place to put shareware notices, copyright 
+information, URLs or secret cabal messages. Except that would 
+make them not secret anymore.
+
+There are also three more un-required functions that you may 
+choose to export, even though your Translator will work and 
+be used by the Translation Kit without them.
+
+"MakeConfig()" allows you to create a BView (to which you can 
+add other BViews such as BCheckBoxes and BMenuFields) that a 
+client application can add to a window and display on screen. 
+The purpose of this view should be to twiddle whatever 
+tweakable parameters your Translator has, and the View should 
+remember these changes for later uses. You can see this 
+implemented in the PPMTranslator as the struct ppm_settings 
+variable g_settings, and the PrefsLoader class instance 
+g_prefs_loader.
+
+"GetConfigMessage()" should return in the message passed to it 
+a "snapshot" of the current settings. An application can then 
+pass a copy of this "snapshot" message data to a later call 
+to Translate(), and your Translator should then use whatever 
+settings are kept in that message rather than the defaults. 
+Similarly, an application can pass a copy of the data in this 
+message to MakeConfig() to have the view pre-configured to 
+the settings stored in that message rather than the current 
+defaults (although the Translator is allowed to change the 
+defaults to what's in the message, as done in PPMTranslator). 
+
+These two functions in coalition make it possible to create 
+an application which can present a UI for choosing a 
+translator, configuring that translator, and later use that 
+specific translator/configuration pair to actually perform a 
+translation. Great for automated batch conversions, for 
+instance!
+
+For more detailed information on the functions used by the 
+Translation Kit, look at the Translation Kit chapter of the 
+BeBook, the section on writing a Translator add-on. 
+http://www.be.com/documentation/be_book/The%20Translation%20Kit/Translator%20Protocol.html
+
+The last non-required function is "main()". On the BeOS, 
+there really isn't any difference between shared libraries, 
+add-ons, and applications, except in how they are used and 
+what you call them. You can load an application as an add-on, 
+or launch a shared library, providing that the executable in 
+question exports the right functions. To be an application, 
+all you have to do is to export a symbol named "main()". 
+
+PPMTranslator takes advantage of this schizophrenia to do 
+something useful when double-clicked -- it runs its own 
+control panel by calling its own MakeConfig() function and 
+adding the resultant View to a window, and then quits when 
+the window is closed. I recommend that all Translator add-ons 
+do the same thing; that way a user will have an easy way of 
+setting the defaults for use by applications that don't 
+display Translator user interfaces, and users will also get 
+something useful out of double-clicking what might be an 
+unknown executable found on their disk.
+
+
+
+Once your Translator is debugged and ready to be shipped, you 
+only need to make sure it gets installed where the 
+Translation Kit will find it. By default, the Translation Kit 
+will look in the following three places for Translators:
+/boot/home/config/add-ons/Translators/
+/boot/beos/system/add-ons/Translators/ -- reserved for Be
+/boot/home/config/add-ons/Datatypes/   -- for old Datatypes
+However, the user can change this behaviour by setting the 
+environment variable TRANSLATORS. Users who do this are to be 
+considered power users, so making sure your translator gets 
+installed in ~/config/add-ons/Translators/ by default is the 
+right thing to do.
+
+
+
+Before I leave, I want to explain a few things about the code 
+included with this article.
+
+First, there is the downloading and installation thereof. 
+Just get it from the URL above, put it where you usually put 
+sample source code, and unzip it (or let the Expand-o-matic 
+do it for you). Then, in a Terminal window, "cd" to the newly 
+unzipped folder, and type "make install" to build and 
+install the 'PPMTranslator' and the 'translate' command-line 
+tool. While documentation for the use of 'translate' might be 
+scarce, you have the source, so you should be able to figure 
+it out from there.
+
+PPMTranslator should be doing most things "right" and thus be 
+suitable as sample source. If you find something you don't 
+like or think might be a bug, I would be interested in 
+hearing about it, and fixing the archive.
+
+The utilities in colorspace.cpp are intended as a quick way 
+to get the job done when you need to output data in some 
+color_space format other than what you have. They are not 
+intended as a high-quality color convolution or separation 
+package. Specifically, the conversion to grayscale is subpar, 
+and the conversion to/from CMY(K), while correct, assumes that 
+you're using perfect inks on perfect paper. I wish!
+
+If you read through the sources and draw the conclusion that 
+version R4 will define new values for the color_space enum 
+for color spaces not previously defined in <GraphicsDefs.h>, 
+you are correct. However, there is one caveat: while using 
+this enum to communicate color space information is 
+convenient, not all applications or classes will support all 
+color spaces. Drawing a BBitmap in the B_CMYK32 color space 
+to a BView will not work, nor can you draw into a BBitmap 
+with a color space of B_YCrCb_422. Still, having names for 
+these spaces is better than a complete vacuum.
+
+What are you waiting for? The source is there to explore, and 
+the world is waiting for your Translators! Shoo!

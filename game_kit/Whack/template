@@ -1,0 +1,70 @@
+/* clever readers will see how one could modify this file and add some
+ * code to make the add-ons Whack generates also be Blanket screen savers,
+ * full-fledged programs, etc.
+ */
+
+#include <stdlib.h>			/* for rand() et al */
+#include <math.h>			/* for sin() et al */
+
+#include <SupportDefs.h>
+#include <DirectWindow.h>
+
+extern "C" {
+_EXPORT void whack_frame(int32, int32 *, uint8 *, int32,
+		clipping_rect *, int32, clipping_rect, color_space);
+_EXPORT const char *whack_expression(void);
+}
+
+const char *
+whack_expression(void)
+{
+	return __EXPRESSION_STR__;
+}
+
+void
+whack_frame(int32 f, int32 *pixel_cnt, uint8 *framebuffer, int32 rowbytes,
+			clipping_rect *rects, int32 nrects, clipping_rect wbounds,
+			color_space mode)
+{
+	int32 i, x, y, ix, iy, t;
+
+	switch(mode) {
+	case B_RGB32:
+	case B_RGBA32:
+	case B_RGB24:
+	case B_RGB32_BIG:
+	case B_RGBA32_BIG:
+	case B_RGB24_BIG:
+		for (i = 0; i < nrects; i++) {
+			for (y = rects[i].top; y <= rects[i].bottom; y++) {
+				for (x = rects[i].left; x <= rects[i].right; x++) {
+					t = *pixel_cnt = *pixel_cnt + 1;
+					ix = x - wbounds.left;
+					iy = y - wbounds.top;
+					*(uint32 *)((long(framebuffer)+(x*4))+(rowbytes*y)) =
+								__EXPRESSION__;
+				}
+			}
+		}
+		return;
+	
+	case B_RGB16:
+	case B_RGB15:
+	case B_RGBA15:
+	case B_RGB16_BIG:
+	case B_RGB15_BIG:
+	case B_RGBA15_BIG:
+		/* fill this in with the color-space conversion
+		 * code of your choosing
+		 */
+		return;
+
+	case B_CMAP8:
+		/* same here */
+		return;
+
+	default:
+		/* unsupported mode */
+		return;
+	}
+}

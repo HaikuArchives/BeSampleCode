@@ -1,0 +1,150 @@
+BE ENGINEERING INSIGHTS: QuickerPaint
+By George Hoffman (geh@be.com)
+
+The Bay Area is tied more precariously to the diurnal cycle 
+than any other location in the civilized world. Silicon 
+Valley buzzes with geeks staying up all night, hacking away 
+at a problem to meet a beta release deadline the next 
+morning. Geeks on insanely optimistic production schedules 
+that are somehow met when entire companies pull twenty-hour 
+days for weeks at a time. 
+
+Now. Tell me why it is that at 2:00 a.m. on a Tuesday 
+morning, as I sit here writing sample code for all of my 
+loyal readers (you're both still out there, right?), I am 
+unable to order a pizza from any of the lumpty- zillion 
+pizza places in the phone book, because they all stop 
+delivery at 11 p.m.? It's probably the same reason why all 
+movie theaters in the Bay Area run their last show  at 10:30 
+p.m.  Huh?  Am I the only one who is mystified by this? If I 
+had any brains at all, I'd get out of the software business 
+and open up a chain of 24-hour pizzeria/movie theaters.
+
+Ah, there I go again. You'll have to excuse me. There are 
+times in the development cycle of any product when it just 
+doesn't seem to be coming together. You add feature after 
+feature, fix bug after bug, insert moronic Easter Egg after 
+countless moronic Easter Egg, but the product just doesn't 
+seem to cohere. Its shiny surface, if you will, is not 
+congealing  from the smelly, festering pit of your code 
+base. These are dark times for any developer. I have reached 
+such a nadir.
+
+The product, of course, is QuickPaint.
+
+Yes, QuickPaint, the standard BeOS image editor, much like 
+"ed" is the standard UNIX text editor. QuickPaint is the 
+standard by which all other BeOS image editors are judged, 
+and boy, are they all looking good!
+
+Some of you may remember QuickPaint from "Cop-Out" 
+<http://www.be.com/aboutbe/benewsletter/volume_II/Issue28.html#Insight>, 
+in which I introduced it as sample code. Since then, I've 
+promised sample code for using the new BeOS Release 4 
+features I wrote about in "That BeOS is one baad mother..." 
+<http://www.be.com/aboutbe/benewsletter/volume_II/Issue45.html#Insight>. 
+Could there be a better way to demonstrate these new 
+features than integrating them into the Be Developer 
+Newsletter's own Photoshop-killer übereditor, QuickPaint? 
+Probably! But I did it anyway!
+
+Among the new QuickPaint features are support for layers, 
+anti-aliased pen strokes, image import, and several new 
+tools. Here's where to get it:
+
+<ftp://ftp.be.com/pub/samples/graphics/QuickPaint.zip>
+
+You need R4 to compile and/or run it. The makefile included 
+is strictly bare bones and doesn't handle dependencies 
+correctly (again, because I am lazy) so you'll probably want 
+to write your own makefile or use a BeIDE project to make 
+small changes, in order to be sure that all necessary files 
+are recompiled.
+
+The UI is easy enough to use, although completely 
+un-self-explanatory. Basically, you choose a tool and start 
+drawing. The pen tool is now anti-aliased and thick; other 
+drawing tools also use thick pen sizes. The two new tools 
+are a transparentizing pen (the inverted pen icon) and a 
+"hand" tool to move layers around (that's the big X, because 
+I didn't want to bother coming up with an icon).
+
+To add a layer, either hit Alt+L or choose it from the 
+Layers menu, or drag and drop an image onto QuickPaint from 
+the Tracker. You can also choose Add Image from the File 
+menu and that image will be added in another layer. The 
+layer stack appears along the left side of every editor 
+window. To select a layer for drawing, left-click it; its 
+button will be pushed in, indicating the selection. To 
+hide/show a layer, right-click it. To change the order of 
+the layers, left-click and drag the layer button to the new 
+location in the stack. Clickable arrows will appear above or 
+below the stack window if you can scroll to see more layers.
+
+The changes to the QuickPaint sources are evident enough; 
+the code has bloated up to almost 3,000 lines. But in those 
+lines you'll find demonstrations of some of the coolest and 
+most useful new app_server features.
+
+For instance, the new alpha-blending capabilities are used 
+throughout the program. You'll find usage of the "normal" 
+B_ALPHA_OVERLAY blending mode in Layers.cpp (to display the 
+strike-out mark over the buttons of nonvisible layers) and 
+in BitmapDocument.cpp, where the layer composition is done. 
+The "weird" and more expensive B_ALPHA_COMPOSITE mode is 
+demonstrated in action in ToolLib.cpp, where the new 
+anti-aliased pen lives. To see why it's needed, change the 
+mode to be B_ALPHA_OVERLAY and draw a bit with the pen. Try 
+drawing different colors on top of one another in the same 
+layer. The effect is interesting, but probably not what you 
+want. B_ALPHA_COMPOSITE preserves all the alpha information 
+-- as you'd expect -- and is designed explicitly for this 
+kind of thing: alpha-compositing images onto an 
+offscreen-for-later alpha overlay. There's also a bit of 
+explicit manual fondling of alpha data in the "hand" tool -- 
+layers that are dragged become translucent so you can see 
+the layers underneath for the duration of the drag. This is 
+done by manually setting the alpha values of pixels -- an 
+easy, safe, and useful technique, as long as you're sure of 
+your pixel formats. 
+
+Other new APIs are scattered here and there. The new 
+ClipToPicture API is used in a lightweight way to provide a 
+mask for the strike-out marks on the layer buttons that I 
+mentioned above. The view transaction methods are used in 
+LayoutViews() in Layers.cpp while laying out the layer views 
+on the matrix buttons. All the interface controls and 
+drawing tools are now asynchronous (i.e., they don't do 
+polling, but instead rely on MouseMoved() and MouseUp(). 
+Among the drawing tools some choose to receive pointer 
+movement history and others choose to throw it away, 
+according to the needs of the specific tool. 
+
+Beware that there are bugs in some of the translators that 
+improperly set the alpha of pixels read from an imported 
+file. The Be logo in the SampleMedia folder, for instance, 
+loads without problems, but as all the pixels have an alpha 
+of zero, the new layer appears blank. These bugs will be 
+fixed for R4.1. Also fixed for R4.1 will be the conspicuous 
+absence of alpha controls on the BColorSelector; in fact, 
+the colors returned by it are also incorrect and have the 
+alpha set to zero. QuickPaint sets it back to 255 and does 
+without translucent primitives for now. 
+
+I welcome any feedback from developers about how useful all 
+this QuickPaint nonsense is, and any questions about how the 
+new APIs are used in general or specifically in QuickPaint. 
+I'd also like to point out that I haven't implemented any of 
+the things I suggested last time as "exercises for the 
+reader," so you can simply merge all the code you've written 
+for those exercises to the new source base and be ready to 
+rip! Heh-heh-heh. Do you feel guilty? Good!
+
+In closing, I'd like to take this opportunity to welcome 
+Ficus Kirkpatrick to the growing, tightly integrated 
+QuickPaint Application Suite Family. We here at QuickPaint, 
+Inc,. are proud to add Whack to our offerings as the 
+flagship product of our lucrative Really Cool Useless Crap 
+division. As a result of this merger, Ficus will become a 
+wholly owned subsidiary of me. He'll soon be available for 
+bachelor parties and bar mitzvahs; I'll keep you posted.

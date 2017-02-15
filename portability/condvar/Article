@@ -1,0 +1,54 @@
+DEVELOPER WORKSHOP:  Condition Variables, Part 1
+By Christopher Tate -- (ctate@be.com)
+
+In a multithreaded system like BeOS, the most critical issue is the synchronization of simultaneous tasks. The BeOS kernel provides one synchronization tool, the semaphore, but not all synchronization problems are best addressed this way. In particular, software designed for other operating systems where semaphores are not the primary synchronization tool can be difficult to rewrite using other primitives.
+
+In the Unix world, for example, the basic synchronization primitive is the "condition variable," or "CV" for short. Superficially, CVs behave similarly to semaphores. When a thread waits on the CV, it blocks until some other thread signals that CV. The first thread then awakens and continues executing.
+
+Signalling a condition variable is analogous to releasing a semaphore. The difference between them is in what happens when they're signalled (or released) when no threads are waiting. A semaphore "remembers" the signal; a thread that later tries to acquire the semaphore will succeed immediately because of the earlier signal. In contrast, condition variables don't remember whether they were signalled: if no threads are waiting when the CV is signalled, the signal is "lost," and has no effect.
+
+In this week's article I'll present a condition variable implementation for BeOS. The interface is similar to the POSIX threads API for familiarity and ease of porting. Building a CV implementation using only semaphores turns out to be quite complex, so I'll just explain the code's behavior here and leave the detailed analysis of its workings until next week. You can download the code and an example program that uses it at this URL:
+
+   <ftp://ftp.be.com/pub/samples/portability/condvar.zip>
+
+Unfortunately, I don't have enough space here to discuss condition variable semantics in detail. I recommend a good POSIX threads book for this. My personal favorite is David Butenhof's Programming With POSIX Threads, but the O'Reilly book Pthreads Programming is also pretty good. I'm also trying to avoid typing too much because of a hand injury, so for now, I'll just summarize the interface and the example program.
+
+Condition variables are tightly associated with a locking primitive called a "mutex," so the library provides a C interface to both. Here are the APIs for both:
+
+   /* mutex operations */
+   status_t be_mutex_init(be_mutex_t* mutex,
+                          be_mutexattr_t* attr);
+   status_t be_mutex_destroy(be_mutex_t* mutex);
+   status_t be_mutex_lock(be_mutex_t* mutex);
+   status_t be_mutex_unlock(be_mutex_t* mutex);
+
+   /* condition variable operations */
+   status_t be_cond_init(be_cond_t* condvar,
+                         be_condattr_t* attr);
+   status_t be_cond_destroy(be_cond_t* condvar);
+   status_t be_cond_wait(be_cond_t* condvar,
+                         be_mutex_t* mutex);
+   status_t be_cond_timedwait(be_cond_t* condvar,
+                              be_mutex_t* mutex,
+                              bigtime_t absolute_timeout);
+   status_t be_cond_signal(be_cond_t* condvar);
+   status_t be_cond_broadcast(be_cond_t* condvar);
+
+Mutex operations are a lot like BLocker operations; I won't discuss them much here, except to say that, unlike a semaphore, a mutex can only be unlocked by the same thread that locked it. This provides a stronger locking guarantee.
+
+be_cond_wait() and be_cond_timedwait() are the operations for blocking on the condition variable. They're identical except for the timeout semantic: be_cond_wait() blocks forever, and be_cond_timedwait() blocks until the specified time. That time is *absolute*, not relative, and in this implementation it uses the same time base as the kernel's system_time() function. If you want to block until 10 seconds into the future, you pass (system_time() + 10000000) as the timeout value. Note that there is a mutex argument to these functions: that mutex *must* be locked when the wait function is called, and the mutex is guaranteed to be locked when the function returns, even if the function returns an error.
+
+be_cond_signal() awakens one waiting thread, and be_cond_broadcast() awakens *all* waiting threads. It's not necessary for any mutex to be locked when either of these two signalling functions is called.
+
+It's important that your code test the condition you're interested in before blocking on the condition variable, and then test it again after awakening. For example, in the sample Alarm app, the condition is "the alarm queue is not empty." When waiting on this condition, the code looks like this:
+
+   while (alarm_list == NULL)
+   {
+       be_cond_wait(&alarm_cond, &alarm_mutex);
+   }
+
+This before-and-after testing is necessary because in certain rare circumstances the waiting thread may awaken without the condition variable being signalled. This is called a "spurious wakeup." The POSIX spec explicitly permits such behavior because preventing it can make CV implementations far less efficient.
+
+The Alarm sample is a direct rewrite of Example 3.3.4 in the Butenhof book cited above. It repeatedly asks the user for an alarm time, expressed as a number of seconds into the future, and a message associated with that time. It then issues the message at that time. The code is heavily commented to explain how the condition variable is being used, and illustrates both regular and timed waiting. If you're new to condition variables, I recommend playing with the sample application, reading through the code, and thinking about how the implementation would be different if based on semaphores.
+
+That's it for this article. Next week I'll look at the CV implementation itself, and explain why its unusual approach was necessary to guarantee the correct semantics.

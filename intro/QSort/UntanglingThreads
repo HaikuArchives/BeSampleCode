@@ -1,0 +1,219 @@
+DEVELOPERS' WORKSHOP: Untangling Threads
+By  Michael Morrissey-- <jersey@be.com>
+
+"Developers' Workshop" is a weekly feature that provides
+answers to our developers' questions, or topic requests.
+To submit a question, visit
+<http://www.be.com/developers/suggestion_box.html>.
+--------------------------
+
+If you've never given much thought to what multithreading is and how
+it works, chances are that your code may have routines which could
+greatly benefit if modified to take advantage of threading.  Often
+applications have small, helper functions which contribute
+significantly to the running time of the application, and threading
+these functions frequently can lead to enormous speed improvements on
+multiprocessor machines.
+
+In this article, we'll be looking at one such helper function, the world-
+famous Quicksort routine.  We'll investigate what makes a routine a good
+candidate for threading, give some general design tips, and offer questions
+to keep in mind when threading your code.
+
+Before you look at the sample code, you might want to skim through the
+BeBook's section on Threads, and the one on Semaphores.  You can
+get the sample code from here:
+
+ftp://ftp.be.com/pub/samples/intro/qsort.zip
+
+The sample code version of Quicksort is not meant to be put into a
+library, but rather to be used as a tool for experimentation.
+Consequently, there are three command-line arguments: the first
+specifies the size of the array to be created and filled with random
+integers, the next argument specifies the maximum number of threads to
+spawn for sorting, and the third argument specifies a theshold
+variable, which indicates the size of the smallest array which is to
+spawn a thread.  The program also creates a BStopWatch, which will
+give you a rough idea of how the arguments affect the runtime of the
+sort.
+
+First, about the algorithm: Quicksort is the canonical
+divide-and-conquer algorithm. The general idea is this: given an array
+of numbers, choose a "pivot value"; ideally, the pivot is the mean
+value of the array.  Then reorder the elements of the array so that
+elements less than the pivot appear on the low end of the array, and
+elements greater than the pivot appear on the high end.  You now have
+partitioned the array into two sub-arrays: one with values less than
+pivot, one with values greater than pivot.  Now recursively apply this
+algorithm to each of the two sub-arrays, partitioning each of the
+sub-arrays into two more sub-arrays.  In this way, you order the
+entire array by working on consecutively smaller and smaller arrays.
+
+Quicksort is good for large arrays, but inefficient on smaller ones.
+For this reason, one optimization which is generally made is to order
+small sub- arrays using a straight insertion-sort, rather than
+partitioning down to single elements. This results in a great speed
+up, and the sample code uses it in the Partition() function, for
+sub-arrays with less than 20 elements.  (The value of 20 is somewhat
+arbitrary; try changing it to see if there's any effect.)
+
+At this point, you might be saying to yourself, "We have the regular,
+unthreaded version of Quicksort.  Great!  Now how do we thread it?"
+If you're wondering about that, back up!  The question that you should
+be wondering about is: "Is threading this algorithm going to speed up
+the running time of this algorithm?" Threading an algorithm doesn't
+always improve running time, and it can even hurt running time.
+There's nothing worse than rewriting a piece of code to make it run
+faster, only to discover that you've slowed it down.  (Trust me.)
+Unfortunately, There's no simple way to decide whether or not
+threading is a good idea. You can, however, look for some tell-tale
+signs, use your best judgement, and experiment.
+
+One of the most important questions to ask is, "Will the data the
+threads are working on overlap or be mutually exclusive?"  If the data
+is independent, the need for synchronization between the threads is
+greatly reduced, which saves on both running time and on your effort
+in implementing the algorithm.  If the data overlaps, you'll have to
+carefully consider how to synchronize your threads so that they don't
+clobber each other's work, and also so that they aren't spending all
+of their time competeing for control of a variable rather than doing
+"real" work.
+
+The next question to ask is, "Does the amount of work each thread will
+perform significantly outweigh the overhead of managing the thread?"
+As light-weight as they are, threads still have overhead, in the form
+of kernel calls, memory allocation, and context-switching.  If your
+thread isn't going to spend a fair amount of time computing, the
+overhead might not be worth it.
+
+I must admit that Quicksort for integers fails this test.  Comparing
+integers is very inexpensive, and does not far outweigh the cost of
+spawning a new thread.  It's easy to imagine, however, sorting an
+array of a user-defined type which has an expensive comparison
+operation, such as sorting an array of complex numbers.  For
+simplicity's sake, rather than defining my own type and templatizing
+the QSort class, I compare the logarithms of an array of integers
+(rather than the integers themselves).  The resulting ordering is the
+same as if I'd ordered the integers directly, but the logarithm
+operations are expensive enough to make threading worthwhile.
+
+Your next question might be, "How will I know when my algorithm has
+finished?" That sounds like a funny question if you're only used to
+working with single-threaded algorithms, but it's quite important in
+the multithreaded world.  Threads are not guaranteed to execute in a
+particular order (unless you synchronize them to do so explicitly), so
+you cannot predicate your termination condition on the order of
+execution.  In Quicksort, when an element is put into its correct
+place in the overall array, a counter which refers to "elements yet to
+be sorted" is decremented.  When the counter reaches zero, a semaphore
+is released, indicating to the managing thread that the sorting is
+finished and the child threads are finished.
+
+Another crucial question is, "How many threads should I start?"
+Surprise --  there's no easy answer to this question either.  In the
+case of Quicksort, it doesn't do much good to have more threads
+running that processors.  That's because when a Partition thread is
+running, it can run straight through, as fast as it can, since it
+doesn't try to acquire variables which other threads might be using,
+which could cause contention. Some algorithms may benefit from having
+more threads than processors, since while one thread is idle, waiting
+to acquire a shared resource, another thread can be running.
+
+Not having more threads than processors (for Quicksort) is only half
+of the situation. Ideally, you'd like to have at exactly as many
+threads as processors running at any point in time, so as to keep all
+of the processors working.  Just spawning threads and giving them an
+initial amount of work to do is not enough --- one thread might finish
+sorting a sub-array faster than the others.  It would be good if this
+thread could go back and help out the other threads which are still
+running.  So in the QSort constructor, we create a semaphore and give
+it a thread count of THREADS (from argv):
+
+QSort::QSort(int32 *vector, int32 count)
+{
+system_info info;
+get_system_info(&info);
+cpu_count = info.cpu_count;
+
+// this is our "pool" of worker threads...
+workthread = create_sem(THREADS, "workthread");
+
+// for real code, you'd have a thread count of cpu_count...
+// workthread = create_sem(cpu_count, "workthread");
+
+...
+}
+
+The workthread semaphore controls how many threads can be started.
+Before a worker thread is spawned, it tries to acquire the workthread
+semaphore. If it is immediately available, a worker thread is spawned
+and resumed:
+
+if(big && acquire_sem_etc(thisclass->workthread, 1,
+B_TIMEOUT, 0) == B_NO_ERROR)
+{
+// there's a worker thread available...
+
+tid = spawn_thread(Partition, "Partition",
+B_NORMAL_PRIORITY,
+new
+WorkUnit(start, j, thisclass, true));
+
+// if spawn_thread failed, we can still continue...
+if(tid < 0)
+{
+Partition(new WorkUnit(start, j, thisclass,
+false));
+}
+else
+{
+resume_thread(tid);
+}
+}
+else // no available worker threads in the pool...
+{
+Partition(new WorkUnit(start, j, thisclass, false));
+}
+
+If there are no available threads in the pool, that is, if
+acquire_sem(workthread) would block, then we simply call Partition()
+directly without starting a new thread and without waiting for one to
+become available.  Naturally, when a thread has finished processing,
+it must release the workthread semaphore, effectively returning the
+thread to the pool...
+
+// if we were spawned, then add a "thread" back
+into the pool...
+if(unit->spawned)
+{
+release_sem(thisclass->workthread);
+}
+
+Typically, rather than creating a thread every time it is taken from
+the pool, and killing the thread every time it is returned to the
+pool, you would simply resume and suspend the same threads, and feed
+the awakened thread fresh data.  For this sample code, I chose not to
+implement that strategy for reasons of clarity. You should take a few
+minutes and think about how you'd restructure this program to use the
+"traditional pool" scheme, how you'd get fresh data into the threads,
+and how you might modify the mechanism which detects when the sort is
+finished.
+
+One final thought: keep in mind that you want your routine to scale as
+nicely as possible from a single-processor machine to a
+multi-processor machine. Compare the single thread version of your
+routine on a uniprocessor with the multithreaded version of your
+routine on a uniprocessor.  Is the multithreaded version much slower?
+If it is, can you rework your threading model to reduce that
+discrepancy?  If not, you may want to consider special-casing your
+routine on uniprocessors.
+
+I strongly encourage you to play around with the arguments to this
+program, and see how the size of the array, the number of threads in
+the pool, and the threshold variable interact and affect running time
+of this program.  Then try looking at your own code for functions
+which might benefit from threading.  If you think you have a good
+candidate, experiment!
+
+Enjoy!
+

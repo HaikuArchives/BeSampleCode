@@ -1,0 +1,14 @@
+# @Eddie Workset@
+AddWorkset "ColorPicker.wks" "/boot/home/src/colorPickerModule/simpleColorPicker/ColorPicker.wks"
+AddFileGroup "simplePicker" "/boot/home/src/colorPickerModule/simpleColorPicker"
+AddFile "SimplePicker.cpp" "/boot/home/src/colorPickerModule/simpleColorPicker/SimplePicker.cpp"
+AddFile "SimplePickerApp.cpp" "/boot/home/src/colorPickerModule/simpleColorPicker/SimplePickerApp.cpp"
+EndFileGroup "simplePicker"
+AddFileGroup "Resources"
+AddFile "SimplePicker.rsrc" "/boot/home/src/colorPickerModule/simpleColorPicker/SimplePicker.rsrc"
+EndFileGroup "Resources"
+AddFileGroup "scratch" -nomake
+AddFile "ColorPickerClient.wks" "/boot/home/src/colorPickerModule/colorPickerClient/ColorPickerClient.wks"
+AddFile "CrayonPicker.wks" "/boot/home/src/colorPickerModule/crayonColorPicker/CrayonPicker.wks"
+AddFile "Protocol.h" "/boot/home/src/colorPickerModule/simpleColorPicker/Protocol.h"
+EndFileGroup "scratch"

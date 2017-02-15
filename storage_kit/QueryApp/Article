@@ -1,0 +1,208 @@
+Let's See What We Can Find
+Part 1: Static Queries
+by Stephen Beaulieu <hippo@be.com>
+
+This week we have a very simple introduction into a topic
+that most BeOS users and developers will find familiar: the
+query.  Even if you have never looked at the
+programming behind the scenes, most everyone has used the
+Tracker's Find menu item to do a search of their harddrive.
+The force behind this search is the file system query.
+
+A query asks the file system for a list of entries that satisfy
+certain criteria.  These criteria are defined in terms of standard
+file system information (like name, size and modification date
+of a given file) and file system attributes. A query needs to
+contain either one of the standard fs information fields, or
+an attribute that has been indexed.
+
+I will move on assuming that there is a basic understanding of
+these issues.  For more information on attributes and attribute
+indexing, please look at the following newsletter articles:
+
+Attributes <http://www.be.com/aboutbe/benewsletter/volume_II/Issue17.html#Workshop>
+Of Indexes and entry_refs <http://www.be.com/aboutbe/benewsletter/volume_II/Issue8.html#Workshop>
+Proper Attribution <http://www.be.com/aboutbe/benewsletter/volume_II/Issue2.html#Workshop>
+
+Static Queries
+A static query is a one-time snapshot of files on a disk
+that met the specified criteria at the time the query was made.
+Depending on other activity on the machine, the list of
+matching items can change by the time it is given to you,
+and you must be prepared in case that happens.  Next week we
+will delve into the issue of live queries and node monitoring
+to make sure your list remains up-to-date, but that is a much
+more complicated issue.  This week's article will serve as
+the foundation for that more interesting discussion.
+
+Let us examine the make-up of QueryApp, the sample code provided
+with this article.  It can be found at:
+
+<ftp://ftp.be.com/pub/samples/storage_kit/queryapp.zip>
+
+QueryApp is very straight-forward, and somewhat limited.  All of the
+interesting work is done by the QueryWindow class.  Basically this
+provides an interface that allows the developer to search the drive the
+application is on for Folders, Source Code or Files (non-folders)
+that have a certain case-sensitive string in their names.  The query
+string that was built is displayed, as well as the paths of the
+matching entries.
+
+The BeOS provides two interfaces for creating static queries: a straight
+C function-based interface, and the much more common (and flexible) BQuery
+class.  QueryApp demonstrates both methods, and allows the user to choose
+the underlying method (to demonstrate that both provide identical
+results.)
+
+Let's begin by looking at the C implementation from FetchC():
+void 
+QueryWindow::FetchC()
+{
+	//gather the information from the views
+	char query_string[1024];
+
+	if (fFileType == FILES_TYPE) {
+		sprintf(query_string, "((BEOS:TYPE!=\"application/x-vnd.Be-directory\")"
+			"&&(name==\"*%s*\"))", fNameString->Text());
+	} else if (fFileType == FOLDERS_TYPE) {
+		sprintf(query_string, "((BEOS:TYPE==\"application/x-vnd.Be-directory\")"
+			"&&(name==\"*%s*\"))", fNameString->Text());
+	} else if (fFileType == SOURCE_TYPE) {
+		sprintf(query_string, "((BEOS:TYPE==\"text/x-source-code\")"
+			"&&(name==\"*%s*\"))", fNameString->Text());
+	}
+	
+	fQueryString->SetText(query_string);
+//	printf("%s\n", query_string);	
+
+	//find the device id of our application
+	app_info info;
+	be_app->GetAppInfo(&info);
+	//info.ref.device is our device id		
+	
+	DIR *query;
+	dirent *match;
+	
+	query = fs_open_query(info.ref.device, query_string, 0);
+	if (query) {
+		while(match = fs_read_query(query)) {
+			//create an entry ref from the dirent
+			entry_ref ref;
+			ref.device = match->d_pdev;
+			ref.directory = match->d_pino;
+			ref.set_name(match->d_name);
+			
+			BEntry entry(&ref);
+			if (entry.InitCheck() == B_OK) {
+				BPath path;
+				entry.GetPath(&path);
+				if (path.InitCheck() == B_OK) {
+				//	printf("item: %s\n", path.Path());
+					BStringItem *item = new BStringItem(path.Path());
+					fItemList->AddItem(item);
+				}
+			}
+		}
+		fs_close_query(query);
+	}
+}
+
+As you can see the C interface to queries is simple.  A query token is
+returned to you through a call to fs_open_query().  You specify the
+volume you want to search, and a query string that defines the search
+paramters.  Then you retrieve successive dirent pointers from the
+query using fs_read_query().  This represents an entry that matches
+the criteria.  You use this dirent to create an entry_ref, which you
+use to go through the standard progression to the path that you want.
+This path is then added to the list of paths.  Note that we are very
+careful checking the status of our entry.  It is possible that by the
+time the entry is created, the resource doesn't exist there anymore.
+While this is not as important in this case, where we simply want the path,
+it would be very important to catch a failure in the transformation process
+if the actual data of the entry needed to be accessed (say through a BFile
+or a BNodeInfo). When fs_read_query() returns NULL, there are no more matches
+or an error has taken place.  We break from our loop and make sure to close
+the query with fs_close_query().
+
+BQuery Interface
+
+
+The C++ interface through the BQuery class is a little more user friendly.
+For starters, the class gives you two ways to define the query, through a
+text string like the C Interface (using BQuery::SetPredicate()) and through
+a postfix (Reverse Polish Notation) stack of operations.  Take a look at
+the FetchQuery() function to see it's use:
+
+void 
+QueryWindow::FetchQuery()
+{
+	BQuery fQuery;
+	
+	//gather all of the information from the views
+	char *type = NULL;
+	fQuery.PushAttr("BEOS:TYPE");
+	if (fFileType == SOURCE_TYPE) type = "text/x-source-code";
+	else type = "application/x-vnd.Be-directory";
+	fQuery.PushString(type);
+	if (fFileType == FILES_TYPE) fQuery.PushOp(B_NE);
+	else fQuery.PushOp(B_EQ);
+	
+	fQuery.PushAttr("name");
+	fQuery.PushString(fNameString->Text());
+	fQuery.PushOp(B_CONTAINS);
+	fQuery.PushOp(B_AND);	
+	
+	size_t len = fQuery.PredicateLength();
+	char *string = (char *) malloc(len + 1);
+	fQuery.GetPredicate(string, len + 1);
+	fQueryString->SetText(string);
+	free(string);
+	
+	/* use this application's volume */
+	app_info info;
+	be_app->GetAppInfo(&info);
+	//use the ref of the application binary
+	//use the device from this ref to create a volume
+	BVolume vol(info.ref.device);
+	fQuery.SetVolume(&vol);
+	
+	//fetch the query
+	fQuery.Fetch();
+	
+	//Iterate through the entries
+	BEntry entry;
+	BPath path;
+	while(fQuery.GetNextEntry(&entry) != B_ENTRY_NOT_FOUND) {
+		if (entry.InitCheck() == B_OK) {
+			entry.GetPath(&path);
+			if (path.InitCheck() == B_OK) {
+			//	printf("item: %s\n", path.Path());
+				BStringItem *item = new BStringItem(path.Path());
+				fItemList->AddItem(item);
+			}
+		}
+	}
+}
+
+
+The postfix notation allows you to push operations on to the stack.  You
+first specify the Attribute you want to push with PushAttr().  Then you
+define the criteria you want to compare it against with the various
+PushType functions (PushString(), PushInt32(), PushFloat() and so on.)  Then
+you define how to compare or combine those definitions with the PushOp()
+function.  Detailed descriptions of this process are available in the BeBook
+at: <http://www.be.com/documentation/be_book/The%20Storage%20Kit/Query.html>.
+
+BQueries also are more flexible in how they present matching entries to you.
+The C interface only allows the use of the dirent structure (through
+FindNextDirent()), which while fast, requires some work before you get
+resonably useful objects.  Like BDirectory objects, BQueries also allow
+you to get ready made entry_refs or BEntry objects.  In this case we simply
+ask for the BEntry object we built in the C functions, and after appropriate
+safety precautions, retrieve and store each matching path.
+
+The final bit of flexibility provided by the BQuery class is the ability
+to create live queries.  As mentioned earlier, live queries add an order
+of complexity to the query process.  For that reason I ask you to join me
+again next week for a detailed look at keeping a query list in sync with
+an ever changing file system.

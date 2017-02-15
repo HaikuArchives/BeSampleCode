@@ -1,0 +1,12 @@
+# @Eddie Workset@
+AddWorkset "ColorPickerClient.wks" "/boot/home/src/colorPickerModule/colorPickerClient/ColorPickerClient.wks"
+AddFileGroup "colorPickerClient" "/boot/home/src/colorPickerModule/colorPickerClient"
+AddFile "main.cpp" "/boot/home/src/colorPickerModule/colorPickerClient/main.cpp"
+AddFile "SimpleWindow.cpp" "/boot/home/src/colorPickerModule/colorPickerClient/SimpleWindow.cpp"
+AddFile "ColorLabel.cpp" "/boot/home/src/colorPickerModule/colorPickerClient/ColorLabel.cpp"
+AddFile "ModuleProxy.cpp" "/boot/home/src/colorPickerModule/colorPickerClient/ModuleProxy.cpp"
+EndFileGroup "colorPickerClient"
+AddFileGroup "misc" -nomake
+AddFile "ColorPicker.wks" "/boot/home/src/colorPickerModule/simpleColorPicker/ColorPicker.wks"
+AddFile "CrayonPicker.wks" "/boot/home/src/colorPickerModule/crayonColorPicker/CrayonPicker.wks"
+EndFileGroup "misc"

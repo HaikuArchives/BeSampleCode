@@ -1,0 +1,285 @@
+BE ENGINEERING INSIGHTS: Writing a Modular Color Picker
+By Pavel Cisler -- <pavel@be.com> and
+   Robert Chinn -- <rudeboy@be.com>
+
+Here's an idea we've wanted to try out for a long time. It's
+always amazing how many cool color pickers there are for
+BeOS: roColor, for a start, and more in Gobe Productive,
+ArtPaint, new Mail-It, Pe, and other applications. What if
+you could choose the coolest one and hook it up as the
+preferred color picker for all the apps on your disk? But
+because different apps may need different color pickers, it
+would be best to have both a default picker and application
+specific pickers. If color pickers are written as a separate
+module, we should be able to choose the preferred
+application for color selection in FileTypes, the same way
+we can select a preferred application for
+"text/source-code." Here's how it could work.
+
+A color-defining label/view interacts with a color picker
+module using a messaging suite, designed for selecting a
+color. The messaging suite is well defined, in the same way
+that something like the format of an RTF document is. The
+suite has a MIME type associated with it, for example,
+"application/x-vnd.Be.colorPicker". When a color label is
+invoked, the preferred application for
+"application/x-vnd.Be.colorPicker" is launched and a
+messaging protocol is established.
+
+For this to work right, we need to integrate the color
+picker application and the color label that launches it
+really well. Ideally it should seem as if the module, a
+separate application, were really just a color picker dialog
+in the same application.
+
+The messaging suite will let us do the following:
+
+* Launch the color picker application and establish a
+  connection.
+* Pass in an initial color value.
+* Pass in the name of the target color label that the
+  color picker can use to identify its target (in the
+  window title, for example).
+* Pass in the initial click location to allow positioning
+  of the color picker.
+* Send color updates from the color picker module to the
+  client color label.
+* Send color updates back in the other direction -- if
+  the color label is updated, say by drag and drop, the
+  color picker has to catch up and send Apply, Cancel, and
+  possibly Revert messages back from the color picker to
+  the color label.
+* Break down a connection when the user closes the color
+  picker.
+* Quit the color picker when the invoking color label goes
+  away.
+
+If we can handle all of actions, the color picker should be
+pretty well integrated.
+
+Included with this article are three small apps that
+demonstrate how to implement this scheme. One is a simple
+application with two color labels you can use to set color
+values in preference panels (for example). The other two are
+different color picker panels.
+
+You'll find the source code for this article at
+<ftp://ftp.be.com/pub/samples/application_kit/colorPickerModule.zip>
+
+The code contains most of the fun stuff in this article --
+we'll just point out some of the important parts here.
+
+The first color picker is very limited; it just uses the
+built-in BColorControl. The second one is less trivial; it
+implements a BColorControl-like crayon color picker.
+
+The sample application uses a ModuleProxy class to manage
+the connection to the color picker module. This is done more
+for tidiness than anything else: ModuleProxy makes it easy
+to hook up the described protocol into color labels like
+ColorLabel. It's hard-coded to deal with rgb_color values
+but could be easily modified to accommodate different value
+types by turning it into a template class.
+
+The destructor of ModuleProxy sends a message to any open
+color picker to quit itself, so we don't get color pickers
+hanging around when the originating dialog is gone. The
+UpdateValue call is used when the target client -- the
+ColorLabel -- changes its value without the color picker
+knowing. This way the color picker can follow the value by
+updating itself.
+
+MessageReceived handles messages from the color picker --
+forcing an update of the ColorLabel when the color picker
+changes -- and establishes and tears down the connection
+with the color picker. Invoke is called from the ColorLabel.
+Invoke is a little more interesting: if a color picker isn't
+running yet, it launches one, sending it a setup message.
+
+void
+ModuleProxy::Invoke()
+{
+  if (connectionOpen) {
+    module.SendMessage(B_WINDOW_ACTIVATED);
+    // we already have a picker serving us, pull it up
+    return;
+  }
+  ...
+
+  uint32 buttons;
+  BPoint point;
+  target->GetMouse(&point, &buttons);
+
+  BMessage launchMessage(kInitiateConnection);
+
+  launchMessage.AddMessenger(kClientAddress,
+    BMessenger(this));
+    // this is the messenger we want the color picker to
+    // interact with
+  launchMessage.AddPoint(kInvokePoint,
+    target->ConvertToScreen(point));
+    // add the current invocation point so that the color
+    // picker can position itself near the click
+  launchMessage.AddString(kTargetName, target->Name());
+    // add the current invocation point so that the color
+    // picker can position itself near the click
+
+  rgb_color color = target->ValueAsColor();
+  launchMessage.AddData(kInitialValue, B_RGB_COLOR_TYPE,
+    &color, sizeof(color));
+    // add the current color value
+
+  launchMessage.AddInt32(kRequestedValues, B_RGB_COLOR_TYPE);
+    // ask for the type of values we need
+
+  if (preferredApp.Length())
+    // we have a specific preferred application for this
+    // instance launch the picker - use the application
+    // signature for this particular client
+    be_roster->Launch(preferredApp.String(), &launchMessage);
+  else
+    be_roster->Launch(type.String(), &launchMessage);
+      // launch the picker, just use the mime type
+      // to choose the preferred application
+}
+
+Note that Invoke uses the BRoster::Launch(const char
+*mimeType, BMessage *,...) call to start up the color
+picker. If a signature for the preferred color picker was
+specified, it will be launched; otherwise it uses the
+default preferred color picker for the MIME type. It's
+similar to what happens when you double-click a document: it
+may have a specific preferred application signature or it
+may just use the preferred application for the document's
+type.
+
+launchMessage goes to the color picker application's
+MessageReceived:
+
+void
+SimplePickerApp::MessageReceived(BMessage *message)
+{
+  if (message->what == kInitiateConnection) {
+    // This is the initial open message that
+    // ModuleProxy::Invoke is sending us. Pass it on
+    // to the new color picker dialog which will
+    // find all the details in it
+    colorPicker = new SimpleColorPickerDialog(message);
+    colorPicker->Show();
+    return;
+  }
+  BApplication::MessageReceived(message);
+}
+
+SimpleColorPickerDialog extracts the information about the
+dialog position, initial color, window title, etc., and
+replies back to the ModuleProxy, completing the setup.
+
+The destructor posts a message to the client application
+that the color picker was closed, so if the user clicks on
+the color label, ModuleProxy can launch a new copy.
+
+MessageReceived handles the rest of the protocol, closing
+the connection, responding to B_VALUE_CHANGED, and posting
+the appropriate messages for Cancel and OK.
+
+When you right-click on the color label, you get a pop-up
+menu that allows you to select the preferred color picker
+application for the label. The code is similar to the one
+used by FileTypes to select a preferred application for a
+MIME type:
+
+void
+ModuleProxy::RunPreferredPickerSelector(BPoint where)
+{
+  BPopUpMenu *menu = new BPopUpMenu("preferredApp");
+  BMenuItem *item = new BMenuItem("Default", 0);
+  menu->AddItem(item);
+  menu->AddSeparatorItem();
+
+  BMimeType mime(type.String());
+
+  // build a list of all the supporting apps
+  BMessage message;
+  mime.GetSupportingApps(&message);
+  for (int32 index =0; ; index++) {
+    const char *signature;
+    status_t reply = message.FindString("applications",
+      index, &signature);
+
+    if (reply != B_NO_ERROR || !signature || !signature[0])
+      break;
+
+    BMessage *tmp = new BMessage;
+    tmp->AddString("signature", signature);
+
+    entry_ref entry;
+    if (be_roster->FindApp(signature, &entry) == B_OK)
+      // add the application by its name
+      item = new BMenuItem(entry.name, tmp);
+    else
+      // can't find the app, just use the signature
+      item = new BMenuItem(signature, tmp);
+    menu->AddItem(item);
+
+    // mark the preferred app
+    if (preferredApp.ICompare(signature) == 0)
+      item->SetMarked(true);
+
+  }
+
+  if (!menu->FindMarked())
+    // mark "Default"
+    menu->ItemAt(0)->SetMarked(true);
+
+  // make the selected signature preferred
+  item = menu->Go(where);
+  const char *signature;
+  if (item) {
+    if (!item->Message())
+      // picked "Default"
+      preferredApp = "";
+    else if (item->Message()->FindString("signature",
+      &signature) == B_OK)
+      preferredApp = signature;
+  }
+
+  delete menu;
+}
+
+If you compile the application and the two color pickers,
+note that when you click on a color label, it launches a
+color picker application; the title of the window is
+identical to the name of the color label; and the initial
+color of the color picker matches the color label. You can
+right-click on the color label and choose the preferred
+color picker for the given label. If you keep the default
+setting, you can use FileTypes to pick which of the two
+color pickers will be used. If you change the color in the
+picker, it's updated in the color label. If you drag and
+drop a swatch between the two color labels (click on one of
+the color labels and start dragging) to change the label
+color, the color picker will follow. If you drag and drop a
+color from roColor, it changes to that color. If you quit
+the application, the color picker quits too -- which is just
+what we wanted it to do!
+
+Some possible enhancements -- fun things to try:
+
+* Allow multiple connections -- not very practical in this
+  case, but each time you Invoke the color label, you can
+  instantiate a new ModuleProxy, adding them to a list, each
+  time a color picker quits you delete it. You could have
+  two color pickers target the same color label; with a
+  little bit of tweaking you could have it set up so that
+  changing one color picker not only updates the color
+  label, but also the second color picker.
+
+* Use scripting instead of a rigid messaging protocol. The
+  color values can be passed back and forth between the
+  color label and the color picker using the Get/Set
+  property calls.
+
+* Write a modular volume control, etc. You could apply
+  this technique to writing other things than just color
+  pickers.

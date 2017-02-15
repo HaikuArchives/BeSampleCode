@@ -1,0 +1,5 @@
+# makefile for the LoadAddon sample
+
+default .DEFAULT:
+	-@$(MAKE) -C Effects $@
+	-@$(MAKE) $@

@@ -1,0 +1,98 @@
+Wow, time flies when you're working at Be!  Two weeks between these articles seems like meer minutes to me.  So I had to get out my scraper and attack the walls of my brain with vigor to get together something to tell you all about.  But first a public service message.
+
+We (Brian and I) have been working hard for the last couple months to bring you a new, improved, more responsive DTS.  If you tried it before and found that we never responded or took too long to answer, it's time to try it again.  Come one, come all!  Send some mail to devsupport@be.com.  We are here to help, and we will hunt down your favorite Be engineer and pry the answers out of them (that is if we haven't figured it out yet ourselves;-)  DTS will become even more responsive as we move into the new year with a new addition to the team.  I'll tell you who in two minutes - I mean two weeks.  Meanwhile, on the other side of the world, Be Europe has added a new developer support engineer, Thijs Stalenhoef.  The combined efforts of our US and European DTS teams should serve you well as we move into the new era of Intel support.
+
+Thank you for that dts news update, and now back to our regularly scheduled program...
+
+Speaking of lots to read, there is an incredible amount of information to absorb when learning to program for a new OS.  A lot of the hard to get information about BeOS programming is hiding in back issues of the Newsletter.  There are a couple of gems on add-ons from the not-too-distant past.
+
+BE ENGINEERING INSIGHTS: Writing Add-ons in C++ 
+By Cyril Meurillon
+http://www.be.com/aboutbe/benewsletter/Issue102.html
+
+BE ENGINEERING INSIGHTS: Shared Librairies And Add-Ons 
+By Cyril Meurillon
+http://www.be.com/aboutbe/benewsletter/Issue82.html
+
+So you've read Cyril's articles about how to create an add-on, and where to put them depending on their usage, but now you're actually going to try to load an add-on.  
+
+"I put my add-ons in a folder called Effects that lives in my app's directory.  How do I load the add-ons from that folder when I don't know where it is?"
+
+You can find the path to your app with...
+status_t		GetAppInfo(app_info *info) const;
+
+app_info is a struct found in Roster.h...
+struct app_info {
+				app_info();
+				~app_info();
+
+	thread_id	thread;
+	team_id		team;
+	port_id		port;
+	uint32		flags;
+	entry_ref	ref;
+	char		signature[B_MIME_TYPE_LENGTH];
+};
+
+You can use app_info.ref to find the path to your app and it's parent.
+
+	app_info info; 
+    	BPath path; 
+    	be_app->GetAppInfo(&info); 
+    	BEntry entry(&info.ref); 
+    	entry.GetPath(&path); 
+   	path.GetParent(&path);
+
+To add the Effects folder to the path use BPath::Append().  Append takes a relative path string and adds it to the current path.
+
+	path.Append("Effects");
+
+Now create a BDirectory using BPath::Path().  You can cruise through the directory and try to load each file.
+
+	BDirectory dir( path.Path() );
+	image_id	addonId;
+   	status_t 	err = B_OK; 
+   	Effect*		peffect = NULL;
+   	BPoint		point(0,0), apoint;
+   	BRect		rect;
+   	Effect*		(*NewEffect)( char*, image_id );
+
+   	//load all effects
+	while( err == B_NO_ERROR ){
+		err = dir.GetNextEntry( (BEntry*)&entry, TRUE );			
+		if( entry.InitCheck() != B_NO_ERROR ){
+			break;
+		}
+		if( entry.GetPath(&path) != B_NO_ERROR ){
+			printf( "entry.GetPath failed\n" );
+		}else{
+			addonId = load_add_on( path.Path() );
+			if( addonId < 0 ){
+				printf( "load_add_on( %s ) failed\n", path.Path() );
+			}else{
+				printf( "load_add_on( %s ) successful!\n", path.Path() );
+				if( get_image_symbol( addonId, 
+									"NewEffect", 
+									B_SYMBOL_TYPE_TEXT, 
+									&NewEffect) ){
+					printf( "get_image_symbol( NewEffect ) failed\n" );
+					unload_add_on( addonId );
+				}else{
+					peffect = (*NewEffect)( addonId );
+					if( !peffect ){
+						printf( "failed to create new effect\n" );
+					}else{
+						peffect->Init( this, point );
+						peffect->GetButtonSize( (BPoint*) &apoint );
+						point.y += apoint.y;
+					}
+				}
+			}
+		}
+	}
+
+LoadAddon is a new sample app that covers all your loading add-on questions.
+ftp://ftp.be.com/pub/samples/add-ons/LoadAddon.zip
+
+See you next time, and as always, if you need more info, don't hesitate to ask!
+

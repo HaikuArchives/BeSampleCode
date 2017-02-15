@@ -1,0 +1,19 @@
+This directory contains the source to dynadraw3, a program
+which draws calligraphic strokes by filtering mouse movements.
+Holding the primary mouse button down while dragging the
+mouse produces a stroke.  Clicking the secondary mouse
+button clears the window.  Dynadraw3 adds printing to dynadraw2.
+
+There are two printing modes: Scale-To-Page or Full Size.  
+Scale-To-Page is the default.  The scale factor is determined
+by calculating the horizontal scale and the vertical scale, and
+the taking the smaller of the two and applying it to the FilterView
+with BView::SetScale().
+
+Full Page mode determines how many pages the drawing takes up
+in the horizontal and vertical directions, and then offseting
+the current page rectangle to the top of each page, and calling
+FilterView::Draw().
+
+Michael Morrissey <jersey@be.com>
+June 1998

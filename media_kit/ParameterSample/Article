@@ -1,0 +1,116 @@
+DEVELOPERS' WORKSHOP:  ParameterWebs and Nodes and Controls, Oh My!
+by Christopher Tate - ctate@be.com
+
+I'm sure you've all noticed a certain emphasis on the Media Kit in the last few months' Developer Workshop columns.  So far we've talked a lot about nodes, but not much about how to control their behavior from the application level.  Many commonplace nodes that media applications will deal with on a regular basis have various parameters that can be adjusted at run time.  This week I'll show you how to present a user interface for dynamically controlling a node.
+
+Alas, before you go running off to try the techniques I'll demonstrate here yourselves, I must warn you that like so many of our new Media Kit tools, today's code will only work under Release 4.1, not under Release 4.  Please feel free to follow along at home, though, and as soon as you get your hands on Release 4.1 you can see the glorious results in living color!
+
+Right:  the code.  You can find the ParameterSample application right here:
+
+	ftp://ftp.be.com/pub/samples/media_kit/ParameterSample.zip
+
+This little application displays a pair of windows.  One of these is a duplicate of the Audio preferences panel's "Mixer" tab, and the other contains a single slider control for adjusting the master gain of the system mixer.  All of these controls are "live"; adjusting the sliders while sounds are playing will adjust the sounds' volume.  The secret to all this live instrumentation is the magic of BParameters.
+
+What A Tangled Web We Weave
+
+Any Media Kit node that has an adjustable configuration can express that configuration in terms of BParameters, objects which each describe a single variable parameter.  The set of all BParameters that a node supports is called its "parameter web," and (sensibly enough) is published via a class called BParameterWeb.  Each BControllable node in the system has exactly one BParameterWeb; if the node is not at all configurable, that node's BParameterWeb will contain no BParameters.  You can see whether a given node is controllable by checking (media_node::kind & B_CONTROLLABLE), which will be non-zero if the node is controllable.
+
+The BParameterWeb is not simply a list of BParameters.  Because some parameters are linked -- for example, the gain and mute controls for a particular audio channel -- the BParameterWeb class uses a hierarchical organization in which BParameters are contained by BParameterGroups, which themselves can contain other BParameterGroups; the end result is rather like an organization of files into a directory structure.  This organization of parameters into groups is intended as a "hint" to the user interface to guide the presentation of related parameters.
+
+Ready-Made User Interface:  Media Themes
+
+The Media Kit also supports standardized presentations of media-related controls.  This ensures that all media-related instrumentation that the user sees will have a consistent look and feel.  The Kit uses an object called a BMediaTheme to manage the creation of appropriate BControl objects for configuring nodes.  The design of BMediaThemes is a topic for the future; for today, we'll just be using the default theme to get the controls for our node.
+
+Oh -- our node?  That's true, we need to pick a node to control, preferably one that does something noticable.  The ParameterSample app manipulates the global system mixer's node, just like the Audio preferences panel.
+
+BParameters The Easy Way
+
+The easiest way to present a UI for a node's parameter web is to ask a BMediaTheme to build one for you.  This is the approach implemented in the EasySampleWin class.  Let's look at the relevant code, all of which is in the window's constructor.
+
+	media_node mixerNode;
+	BMediaRoster* roster = BMediaRoster::Roster();
+	roster->GetAudioMixer(&mixerNode);
+	roster->GetParameterWebFor(mixerNode, &mParamWeb);
+
+This is straightforward:  we look up the global BMediaRoster object, ask it for a reference to the global system mixer's node, then get a copy of the node's BParameterWeb.
+
+	BMediaTheme* theme = BMediaTheme::PreferredTheme();
+	BView* paramView = theme->ViewFor(mParamWeb);
+	AddChild(paramView);
+
+That's it!  We ask for the preferred theme, then request a BView from the BMediaTheme that can manage the full BParameterWeb.  Once this view is added to the window, your application needn't do anything with it -- all messages and parameter updating are handled internally to the BView.  As a user, you'll see that this window contains a clone of the Audio preferences panel's mixer controls.  This is because -- surprise! -- the Audio preferences panel uses exactly this technique to build its BViews.
+
+Finer Control -- The Hard Way
+
+But what if you don't want to instrument the entire BParameterWeb?  What if you only want to present a UI for a single BParameter?  Well, life gets a bit more complex in that case.  Instead of creating a BView to handle a single parameter, a BMediaTheme will create a single BControl.  The responsibility for handling that BControl's placement is your application's responsibility.  More significantly, handling that control's *semantics* is also the app's responsibility -- the app must respond to and interpret the BControl's messages, and change the BParameter's value in response to those messages.
+
+The HarderSampleWin class displays a window containing just the master gain slider.  Let's look at the differences from the easy case.  The constructor begins the same way, by looking up the mixer's BParameterWeb, but then things get complicated:
+
+	int32 numParams = mParamWeb->CountParameters();
+	BParameter* param = NULL;
+	for (int32 i = 0; i < numParams; i++) {
+		BParameter* p = mParamWeb->ParameterAt(i);
+		if (!strcmp(p->Kind(), B_MASTER_GAIN)) {
+			param = p;
+			break;
+		}
+	}
+	if (param->Type() == BParameter::B_CONTINUOUS_PARAMETER) {
+		mGainParam = dynamic_cast<BContinuousParameter*>(param);
+	}
+
+This is searching the BParameterWeb for a specific BParameter; in this case, the master gain parameter.  This is easy because there is only one such parameter in the mixer's web.  If you're looking for a particular BParameter from a given parameter web, there are other mechanisms that you can use to locate the one you're interested in, such as looking at BParameter::ID() and matching that against the source or destination ID supplied with your connection to the node.
+
+Note the dynamic_cast.  In general, you won't know the derived type of the BParameter that the web returns to you.  The BParameter::Type() method gives you the information you need to determine which derived class the object really is, and therefore how to manipulate it.  Our example is simplified by knowing that the system mixer's master gain control is always a BContinuousParameter, but it would be a straightforward matter to write code to handle any of the BParameter subclasses appropriately.
+
+Once we've found the right BParameter, we need a control that is appropriate for manipulating it:
+
+	BMediaTheme* theme = BMediaTheme::PreferredTheme();
+	BControl* control = theme->MakeControlFor(mGainParam);
+	mGainControl = dynamic_cast<BMultiChannelControl*>(control);
+	mGainControl->SetMessage(new BMessage(gControlMessage));
+
+That gives us the control, and ensures that its value-changed messages have a known "what" code for our message handler to recognize.  Note that the control is of type BMultiChannelControl.  This class is new in R4.1.  As its name suggests, it provides an interface for controlling arbitrarily many "channels" of data from within a single BControl.  In our case, it will hold two channels of data, because the system mixer is stereo.  Controls derived from BContinuousParameter will generally be derived from either BSlider or BMultiChannelControl -- a general-purpose application will need to be able to handle all possibilities -- but for purposes of the example we assume that the control is a BMultiChannelControl, because the system mixer is stereo.
+
+Now, before we're done constructing the view, a little math:
+
+	float paramMin = mGainParam->MinValue();
+	float paramMax = mGainParam->MaxValue();
+	int32 controlMin, controlMax;
+	mGainControl->GetLimitsFor(0, &controlMin, &controlMax);
+	mScale = (paramMax - paramMin) / (controlMax - controlMin);
+	mOffset = paramMax - mScale * controlMax;
+
+The BControl's range and the BParameter's are not necessarily the same, but they *are* guaranteed to map linearly.  This formula is the result of a little linear algebra that lets us express the parameter's min and max values as a linear function of the control's.
+
+That's it for setting up the window; the rest of the magic happens in the window's MessageReceived() method.  When the slider is moved, the window will receive messages with our designated "what" code indicating the new value of all channels of data managed by that BMultiChannelControl.  The channel values are passed in an array of int32s called "be:channel_value".  If the parameter is single-valued, then there may only be the standard BControl data, under the name "be:value".  A well-behaved application should be prepared to handle either case:
+
+		int32 chan1, chan2;
+		status_t err = msg->FindInt32("be:channel_value", 0, &chan1);
+		if (!err) err = msg->FindInt32("be:channel_value", 1, &chan2);
+		else {
+			err = msg->FindInt32("be:value", &chan1);
+			chan2 = chan1;
+		}
+
+Next, we use the scaling factors that we calculated earlier to transform the slider's values to the BParameter's expected range.  BParameters take floating point values, by the way!
+
+		float chanData[2];
+		chanData[0] = mScale * chan1 + mOffset;
+		chanData[1] = mScale * chan2 + mOffset;
+
+Finally, we're ready to set the parameter's new value.  Like so many other things in the Media Kit, setting a BParameter's value takes a performance time at which to apply the change.  We want the change to be immediate, so we look up the current time according to the node's time source, and set the parameter:
+
+		BTimeSource* timeSource;
+		BMediaRoster* roster = BMediaRoster::Roster();
+		timeSource = roster->MakeTimeSourceFor(mParamWeb->Node());
+		bigtime_t now = timeSource->Now();
+		mGainParam->SetValue(&chanData, sizeof(chanData), now);
+
+Voilà!  An active, effective slider controlling the master system gain without benefit of the Audio preferences panel!
+
+What Now?
+
+Well, okay; it's not the world's most practical application (although a pop-up replicant to tweak the master volume would be pretty handy), but of course it's just a convenient controllable node to illustrate the principles.  Other nodes that media applications will find themselves presenting interfaces for with may include video compression, audio devices including multichannel cards, video capture, and so forth.  Now as soon as you get Release 4.1 you'll be all set to build the UI of everyone's dreams!
+
+There's more that could be done with these implementations, too.  Neither one of them watches the BParameterWeb to see if it changes, and so the dynamic updates that you see in the Audio preferences panel won't appear in these sample windows.  Also, none of these views are "aware" of parameter value changes that are made in other views -- so if you adjust the master gain in the Audio preferences panel, you won't see the sliders move in the sample windows.  Perhaps a future Developer Workshop will address these additional features....

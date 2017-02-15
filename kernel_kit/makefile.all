@@ -1,0 +1,9 @@
+# makefile for all Kernel Kit sample code
+
+LEAFDIRS = \
+	cputime
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

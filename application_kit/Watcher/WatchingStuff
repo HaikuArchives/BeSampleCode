@@ -1,0 +1,27 @@
+Watching Stuff
+Stephen Beaulieu <hippo@be.com>
+
+I've been a bit preoccupied lately with the beta test, so I was caught somewhat by surprise that I had two articles due this week: for the Newsletter and the Developer Letter.  When I noticed this I attempted to get one of my DTS minions to write the article this week.  Nothing doing.  Being a manager is not all its cracked up to be..
+
+So, I have whipped together an article and sample code to present a couple of new features of R4.  The sample code will only run under R4, but you will all be getting that soon (if not soon enough.)
+
+The code can be found at:
+
+<ftp://ftp.be.com/pub/samples/application_kit/Watcher.zip>
+
+Watcher is a very simple application.  It keeps a current display of two sets of items: the currently running applications (with the active application in red), and a list of mounted and previously mounted volumes, the latter in blue.
+
+Both of these tasks could be performed in R3, but with some difficulty.  To keep track of the apps, a developer would have to poll  the be_roster to get the list of running applications, and then check to see which one is active.  This polling would need to be fairly constant to keep the list up to date.  On the volume side, a simple call to BVolumeRoster::StartWatching() would keep you informed of mounting an unmounting volumes, but determining if a newly mounted volume and a previously mounted volume with the same name are identical was difficult at best.
+
+New features in R4 make these trivial to implement, which is what I have done in Watcher.
+
+Watching applications is straight-forward.  The BRoster class now sports StartWatching() and StopWatching() functions, letting you specify a BMessenger to receive notifications concerning the launching, quitting and activation of applications.  The messages sent in response to these requests contain the application signature, the team_id, the main thread_id, the launch flags, and the entry_ref for the application's binary.  This concise information allows Watcher to display the application names and teams, and keep the list up-to-date with launching, quitting and newly activated applications.
+
+Keeping track of unique volumes is also much easier in R4.  A new "be:volume_id" attribute is tagged onto the root folder of volumes.  This uint64 provides an indentifier that persists between mountings of the volume and boots of the BeOS.  Now applications that need to uniquely identify volumes (like back-up utilities or databases) have a much easier time.  Watcher keeps track of all the persistant volumes that have been mounted on the machine, and displays the volume_id, device id and name of each of them.  When a volume is unmounted, Watcher marks it in blue.  Then when the volume is mounted again, Watcher looks to see if it can find a match for the volume_id, updating the device number and name of each volume appropriately.
+
+That's pretty much it for Watcher.  As I mentioned, it is a really simple app.  I will briefly note a couple of other items in R4 that pertain to Watcher. Watcher could be expanded to watch mime type information as well through the new BMimeType StartWatching() and StopWatching() functions.  These inform a BMessenger of changes made to existing mime types, but sadly do not inform it when mime types are added or deleted.  Also, Watcher makes limited use of the new BString class for (you guessed it) string manipulation.
+
+Look for these and other interesting features when R4 is released.
+
+And now back to the beta testing....
+

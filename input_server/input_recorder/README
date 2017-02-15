@@ -1,0 +1,75 @@
+
+			InputRecorder
+				Version 0.3
+
+Instructions
+
+1. Delete the srcs directory if you are not interested in playing with the source to the input recorder stuffs.
+
+2. Launch the install.sh file located in the input_recorder directory. (From a Terminal or from the Tracker should work.) It will show alert boxes informing you of what it's about to do and allowing you to cancle.
+
+3. After the files have been installed, you can remove the binary platform directories if you wish.
+
+4. Start the Input Recorder
+
+5. Click the 'Record' button
+
+6. Do something you might like repeated. (If you want to test it, you might try traversing the Be Menu, opening StyledEdit, type something, then close it without saving.)
+
+7. Click the 'Stop' button when you're done
+
+8. Click the 'Play' button (There's a 'Lock' and 'Loop' option in the 'Options' menu. They lock out user input, and loop back to the beginning respectively.)
+
+9. Watch it do what you did.
+
+10. repeat steps 5 to 9
+
+A Brief FAQ
+
+Q1. It's real hard to press the Stop button with the mouse moving around all the time. Is there an easier way to stop playing input?
+
+A1. Yes. If scroll-lock is pressed it acts just like you pressed the stop button. This lets you stop the playback instead of fighting for control of the mouse. This is also required if you are looping or have user-input locked out. (The modifiers aren't locked, and so scroll-lock still works just fine.)
+
+
+Q2. When I loop, the stop button becomes greyed out. Is there anyway to stop the input while looping?
+
+A2. Yes. (See A1.) The scroll-lock key will behave like pressing the stop button.
+
+
+Q3. Is there anyway to stop the input recorder when you have the user-input locked out?
+
+A3. Yes. (See A1.) The modifiers are never locked out, and so the scroll-lock key will still behave like pressing the stop button.
+
+
+Q4. I was doing something truely horrible and somehow I managed to kill the InputRecorder while it had the user-input locked out. I'm on a network. Do I need to reboot or restart the input_server?
+
+A4. 'InputRecorder --unlock' will tell the InputRecorderFilter to stop filtering the user input events. Restarting the input server would also work, but is unneeded.
+
+
+Q5. I was doing something truely horrible and somehow I managed to kill the InputRecorder while it had the user-input locked out. I'm not on a network. Will Control-Alt-Del work to reboot, or do I need to use a firmer method to get my point across?
+
+A5. Control-Alt-Del (or Command-Control-Delete) will still reboot the computer. It is recommended instead of a firmer method (such as turning off the computer, removing the power cord, etc) as it still allows the filesystems to flush. (You'll still lose any data that was unsaved, of course.)
+
+
+Q6. My input was locked and I needed to reboot. I pressed Control-Alt-Del (or Command-Control-Delete) and instead of rebooting, a window popped up. How am I supposed to reboot now?
+
+A6. The Team Monitor window pops up at the first Control-Alt-Del. However, as mentioned in the Team Monitor window, if you press Control-Alt-Del again, the machine will reboot.
+
+Version Information
+
+0.3 - fixed dependancy on a bug in the input_server. Slightly altered file format, though retained backward compatibility with 0.2.
+
+0.2 - new UI, better, smaller input record files. Used standard files, with their own mime-type and unique header. Input records became double-clickable. Broke compatibility with old records.
+
+0.1 - first release, poorly designed UI, used resource files to store input records
+ 
+Authors and Contributors
+ (In alphabetical order)
+ 
+Baron Arnold - QA Manager affectionately known as "VP of Abuse", The Input Recorder was his idea, and he's also the source of the ideas for all the additional features that have been folded in to it since it's initial inception.
+
+Steven Black - The current maintainer of the Input Recorder. Responsible for the last major rewrite/restructuring and the goofy icons of the InputRecorder and InputRecords.
+ 
+David Chayla - An intern who wrote the initial version of the InputRecorder
+
+Hiroshi Lockheimer - Author of the Input Server, without whom recording/playing input would still remain a dream on BeOS. He also helped David when creating the initial version as at the time he was the only person who knew how it would work.

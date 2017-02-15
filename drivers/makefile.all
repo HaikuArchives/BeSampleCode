@@ -1,0 +1,28 @@
+# makefile for all driver sample code
+
+SUBMAKES = \
+	digit \
+	EtherPCI \
+	graphics
+
+LEAFDIRS = \
+	inquiry \
+	scsi_raw \
+	scsi_skel
+
+# these drivers only support on x86
+ifeq ($(shell uname -m), BePC)
+LEAFDIRS += \
+	buslogic \
+	sonic_vibes \
+	symbios \
+	usb_speaker
+endif
+
+default .DEFAULT:
+	-@for f in $(SUBMAKES); do \
+		$(MAKE) -C $$f -f makefile.all $@; \
+	done
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

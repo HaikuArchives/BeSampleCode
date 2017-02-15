@@ -1,0 +1,90 @@
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^BE ENGINEERING INSIGHTS: Something Fishy
+By Adam Haberlach -- <adam@be.com>
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+I recently implemented a client for the "Distributed Fish
+Protocol" (DFP). The protocol defines a common environment
+for transferring simple data objects ("fish") between
+machines ("tanks"). The protocol was designed as a
+demonstration of some operating systems created by members
+of the ACM chapter at UIUC. The entire system is extremely
+small; the whole thing can be implemented using only
+broadcast UDP packets. Because UDP is somewhat unreliable,
+steps are taken to make sure that fish are not lost. For
+relevant RFCs, check out
+<http://www.acm.uiuc.edu/sigops/eoh98/dfp/fish.html>.
+
+To handle incoming packets, my DFP client implementation
+defines the "FishPortal" class. A FishPortal object binds
+and listens to a UDP port (in a separate thread). When it
+gets a Fish Protocol Packet, the packet is repackaged as a
+BMessage, which is sent to and handled by the client's
+BWindow object.
+
+There are two types of messages that need to be handled: The
+"Tank" message lets a tank locate its neighbors, and the
+"Transfer" message lets a tank transfer a fish to a
+neighboring tank.
+
+
+The Location Message
+
+A tank lives in a 256x256 tank array called "TankSpace." To
+see if its neighbors are "alive", a tank broadcasts a PING
+message to its nearest neighbors in TankSpace (top, bottom,
+left, right), and then listens for a responsive PONG. In my
+DFP client, I use the new BMessageRunner class to regularly
+broadcast the PING message. Before every PING, my FishPortal
+object marks all four neighbors as dead, and then marks them
+alive if they respond. (A more complex system could be a bit
+smarter about tracking the identity and states of the other
+tanks.)
+
+Whenever the status of a neighboring tanks changes, a
+BMessage is sent so that the client can update any
+indicators it uses. My client displays green and red dots to
+indicate the states of the other tanks. Still another neat
+thing for a client to do would be to recognize when it is in
+the same space as another tank and move itself to another
+location to avoid tank collisions.
+
+
+The Transfer Message
+
+When a fish swims to the edge of a tank, the client checks
+to make sure the neighboring tank in that direction is
+alive, and, if it is, it sends the tank a SEND_FISH message
+that includes information about the relevant fish. The
+receiver responds with an ACK_FISH to acknowledge that it
+will take the fish, or a NACK_FISH to refuse. The fish
+supplier responds with a final SYNC_FISH packet, which
+formally passes responsibility for the fish to the receiving
+tank.
+
+If a neighboring tanks isn't alive, the fish is thrown back
+in the same tank and swims off in a new direction. Either
+way, the client need only send a message to the FishPortal,
+which takes care of all the details of passing the fish
+along or throwing it back in the tank.
+
+The FishPortal class also handles a list of "pending" fish,
+since fish spend some time in limbo while the fish-passing
+messages are being handled. Currently, there's no provision
+for other clients denying reception (through a NACK_FISH),
+or not responding. A smarter client would include a time-out
+system to make sure that pending fish don't get lost between
+the display layer and the network.
+
+Note that I didn't spend much time fine-tuning the display.
+As a result, my fish swim backwards and flicker.
+
+I know of one bug in the code, and I'm sure I will get lots
+of mail pointing out the ones that got away. If anyone out
+there has any interesting additions or suggestions (or even
+new clients), I'm always interested.
+
+The supplied client defaults to a tank located at (3,3). To
+specify a different location, use the command-line arguments
+-x <int> and -y <int>. For example, if you have two machines
+on the same network, just starting a client on one machine
+with the default location and the other with the line "Tank
+-x 4 -y 3" should put them next to each other in TankSpace.

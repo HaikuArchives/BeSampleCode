@@ -1,0 +1,46 @@
+A Simple Network Discovery Protocol
+Alfred Landrum
+
+Imagine yourself in a totally dark room.  You can't see anything, but you know other people are around you, because you can hear them talking.  Occasionally, two people try to talk at the same time.  This is followed by a short pause, and then the talking begins again.  The conversations you hear are bizarre, almost nonsensical.
+They sound like:
+
+"Hank! This is Howard!  I have some data for you: #$@#$@%@"
+"Joe! This is Al!  What time is it?"
+"Howard! This is Hank!  I acknowledge data #$@#$@%@".
+"Al! This is Joe!  The time is January 3, 2000, 1445 hours"
+"Everyone!  This is Jason!  I'm here!"
+
+This is one way I picture the network:  A noisy dark room, with lots of shouting.
+
+Our task for today is finding out who's in this room with you.
+
+There are many applications that need a list of the people in this dark room.  The MS Windows Network Neighborhood and the Macintosh Chooser are well known examples.  They build a list of computers that are providing some kind of resource to other computers.  
+In this article, I'll talk through one approach for network discovery, and you can find the source code for an implementation here. [insert source url]  Let's close our eyes, and put ourselves mentally in the dark room...
+
+The first thing we should do is to announce our presence.  The last thing we'll do is to annouce that we're leaving.  In between our entrance and egress, we will announce our existence every so often; if we suddenly drop of the network, everyone else will eventually notice.  This is quite literally a heartbeat - if the others don't hear it, they assume we have died.  If we announce too often, we waste bandwidth;  too infrequently, and we'll show up in the other members' list long after we die.  If we wait 5 minutes, and our announcement message is 100 bytes long, our protocol consumes .3 bytes per second per computer, which is entirely acceptable.
+
+After we announce our presence, we'd like to fulfill our purpose and find out who else is around.  We could wait a while, and eventually we'd hear everyone announce themselves.  You probably don't want to wait that long.  And, we need to remember that we may be the only one present, so we may never hear from anyone.  
+
+A naive way is to ask everyone to announce themselves at once.  Obviously, this is hard on the network, and given the choice, it'd be easier if someone just handed us a list of computers, rather than trying to compile one ourselves.  If we had a designated "special" computer, that we knew of beforehand, we could just ask it.  This is a centralized solution, with all the normal centralized problems.  (What if your special computer is down?  What if it can't deal with the barrage of requests it gets?)  We could have the special computer chosen dynamically, through some type of election protocol.  This is, in my opinion, worse.  Election protocols are hard to implement, and harder to debug.  This is not the answer either.  What's left is a solution that does not depend on a single computer, whether statically or dynamically specified as "special".
+
+Let me convince you that you already know the solution to this problem.  Imagine, if you will, that you are at a party, conversing with friends.  You're feeling comfortable, and the conversation is easy.  Suddenly, a person, whom none of you know, walks up to your group, and without pausing to listen to the conversation, blurts out loudly, "What are you talking about?"  (Are you picturing this?  Concentrate.)  Now, what happens?
+
+In my experience (and I hope this crosses cultural boundaries), there is a pregnant pause, as you and your friends try to decide whether to ignore the impolite intrusion.  Then, someone in your group hesitantly offers the topic of conversation.  This is our solution!  In my analysis, here's what happened.  Immediately after the outburst, everyone stops talking.  There's a small amount of time where the members of your group look at each other, waiting to see if someone else says something, until finally someone does.  Depending on how sociable your set of friends are, someone may answer quickly, or no one may answer at all.  If no one answers, and if the annoying person wants the answer badly, they'll repeat themselves.  Got it?
+
+So, first you announce your presence on the network.  Then, you broadcast a packet that means, "Who's there?"  Every member individually decides whether or not they'll be the one to reply.  Before they reply, they'll wait a bit to see if someone else has already done so.  If someone else replies, there's no need to transmit.  [An issue with this bit of the protocol is how to deal with other members who have just come up.  Check the source code.]
+
+How do the members decide whether they'll reply?  Looking back at the party example, if your group was fairly large, then you had a reasonable expectation that someone (and not you) would answer first.  If your group was small, then there was more of a chance that you would have to answer.
+
+So, whether you answer depends on the size of your group.  Practically, you could decide that you have a 1/N chance of responding, where N is the size of the group.  Or, you could increase that (by some constant factor) to ensure that a timely reply is made.  If the "Who's there?" question is repeated, then you know that no one replied, and you increase your chance of responding.  Eventually, the questioner will get a reply, which will be the list of current members.  
+
+Whew!  There are other issues to consider, but you can check the source for those.  I intentionally used the C networking API, so you could try it out on other OS's.
+
+
+
+
+
+
+
+
+
+

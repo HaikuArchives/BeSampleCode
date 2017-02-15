@@ -1,0 +1,12 @@
+# makefile for all graphics driver sample code
+
+SUBDIRS = \
+	nudge \
+	ram_driver \
+	sample_driver \
+	test_harness
+
+default .DEFAULT:
+	-@for f in $(SUBDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

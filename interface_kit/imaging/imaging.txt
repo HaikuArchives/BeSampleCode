@@ -1,0 +1,14 @@
+         File: imaging.zip
+       Author: Be Developer Technical Support (devsupport@be.com)
+      Release: 0.2 (Aprl 8,1997)
+Compatibility: R4
+     Location: 
+  Description: Image processing routines
+        Notes:
+This contains a basic image scaling routine. It shows how to manipulate a
+BBitmap directly. It also shows how to do things with BFonts.
+
+This version has been updated to R4.
+
+
+

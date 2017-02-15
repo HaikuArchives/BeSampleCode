@@ -1,0 +1,234 @@
+Kernel Programming Part 2: Device Drivers
+By Victor Tsou <vyt@be.com>
+
+The kernel imposes and enforces rules to keep individual
+applications from interfering with other applications or
+bringing down the entire system. For example, a program can
+create windows and send messages to other programs, but it
+can't write into the address space of another program. The
+kernel makes sure everybody plays fair and cleans up the mess
+when accidents occur.
+
+Sometimes this hand-holding gets in the way. When it does,
+device drivers will let you circumvent the kernel's protections.
+Remember, though, that drivers run with the same privileges
+as the kernel, so they must be careful to avoid disrupting
+system stability. Bugs are always more serious in kernel space
+since driver bugs can bring down the entire system. Good design
+dictates that device drivers should be as short as possible,
+with as much code as is feasible relegated to user space.
+
+
+DEVFS
+
+The kernel manages device drivers through devfs, the file
+system mounted at /dev during the boot process. Communication
+between user space and drivers occurs through entries published
+by the driver in the /dev hierarchy. Therefore, the basic
+primitives for interacting with drivers map to basic file
+operations: open, read, write, readv, writev, ioctl, and
+close.
+
+Drivers tell devfs which entries they want to appear in /dev
+through a mechanism known as "publishing." Devfs publishes
+drivers as needed. Typically, this means it publishes drivers
+the first time a program iterates through the directory
+entries for a subdirectory in /dev. The kernel knows which
+drivers publish entries in any given portion of the /dev
+hierarchy through a simple mapping mechanism: binaries appear
+in /boot/beos/system/add-ons/kernel/drivers/dev in locations
+that correlate to their published entries in /dev. For example,
+the atapi driver publishes drivers in /dev/disk/ide/atapi, so
+its binary appears in
+/boot/beos/system/add-ons/kernel/drivers/dev/disk/ide/atapi.
+
+Actually, this is a lie. Since drivers may publish entries in
+more than one location in the /dev hierarchy, the entries in
+/boot/beos/system/add-ons/kernel/drivers/dev are typically
+symbolic links to the actual binaries which live in
+/boot/beos/system/add-ons/kernel/drivers/bin. Of course, the
+same discussion applies to user-installed drivers in
+/boot/home/config/add-ons/kernel/drivers/...
+
+
+Exported Symbols
+
+The driver entry points are the scaffolding required for
+communication with devfs:
+
+status_t init_hardware(void);
+
+This function is called when the system is booted, allowing
+the driver to detect and reset the hardware. The function
+should return B_OK if the initialization is successful or an
+error code if it is not. If the function returns an error,
+the driver will not be used.
+
+status_t init_driver(void);
+
+Devfs loads and unloads drivers on an as-needed basis. This
+function is called when the driver is loaded into memory,
+allowing it to allocate any system resources it needs to
+function properly.
+
+void uninit_driver(void);
+
+Conversely, this function is called when the driver is
+unloaded from memory, allowing it to clean up after itself.
+
+const char **publish_devices(void);
+
+Devfs calls this hook to discover the names, relative to
+/dev, of the driver's supported devices. The driver should
+return a NULL-terminated array of strings enumerating the
+list of installed devices supported by the driver. For example,
+a network device driver might return the following:
+
+static char *devices[] = {
+	"net/ether",
+	NULL
+};
+
+Devfs will then create the pseudo-file /dev/net/ether,
+through which user level programs can access the driver.
+
+Only one instance of the driver will ever be loaded, so it
+must be prepared to gracefully field requests for multiple
+devices. Typically, this is handled by exporting a separate
+entry for each device present in the system. For example,
+the serial driver exports /dev/ports/serial1,
+/dev/ports/serial2, and so on, up to the number of serial
+ports present in the system.
+
+device_hooks *find_device(const char *name);
+
+When an exported /dev entry is accessed, devfs calls a set
+of driver hook functions to fulfill the request. find_device()
+reports the hooks for the entry name in a device_hooks structure.
+The structure, detailed in <be/drivers/Drivers.h>, is composed
+of function pointers, described below in the section "Device
+Hooks."
+
+int32 api_version;
+
+This variable defines the API version to which the driver was
+written; it should always be set to B_CUR_DRIVER_API_VERSION
+(whose value, naturally, changes with the driver API).
+
+Device Hooks
+
+status_t open_hook(const char *name, uint32 flags, void **cookie)
+
+This hook is called when a program opens one of the entries
+exported by the driver. The name of the entry is passed in
+name, along with the flags passed to the open() call. cookie
+is a pointer to a region of memory large enough to hold a
+single pointer. This can be used to store state information
+associated with the open instance; typically the driver
+allocates a chunk of memory as large as it needs and stores
+a pointer to that memory in this area.
+
+status_t close_hook(void **cookie)
+
+This hook is called when an open instance of the driver is
+closed. Note that there may still be outstanding transactions
+on this instance in other threads, so this function should
+not be used to reclaim instance-wide resources. Blocking
+drivers must unblock ongoing transactions when the close hook
+is called.
+
+status_t free_hook(void **cookie)
+
+This hook is called after an open instance of the driver has
+been closed and all the outstanding transactions have completed.
+This is the proper place to perform uninitialization activities.
+
+status_t read_hook(void *cookie, off_t position, void *data, size_t *len)
+
+This hook handles read requests on an open instance of the
+device. The function reads *len bytes from offset position
+to the memory buffer data. Precisely what this means is device
+specific. The driver should set *len to the number of bytes
+processed and return either B_OK or an error code, as appropriate.
+
+status_t readv_hook(void *cookie, off_t position, const struct iovec *vec,
+                                        size_t count, size_t *numBytes)
+
+This is the scatter-gather equivalent of read. The function is
+passed an array of count iovec entries describing address/length
+pairs to put data read starting at position. As with read_hook,
+the function should set *numBytes to the number of bytes processed
+and return an appropriate error code.
+
+status_t write_hook(void *cookie, off_t position, void *data, size_t len)
+status_t writev_hook(void *cookie, off_t position, const struct iovec *vec,
+                                        size_t count, size_t *numBytes)
+
+Conversely, these hooks handle write requests. Again, the
+meaning of "write" is device specific.
+
+status_t control_hook(void *cookie, uint32 op, void *data, size_t len)
+
+This hook handles ioctl() requests. The control hook provides
+a means of instructing the driver to perform actions that don't
+map directly to read() or write(). It is passed the cookie for
+the open instance as well as a command code op and parameters
+data and len supplied by the caller. data and len have no
+intrinsic relation; they are simply two arguments to ioctl().
+The interpretation of the command codes and the parameter
+information is defined by the driver. Common command codes
+can be found in <be/drivers/Drivers.h>.
+
+NOTE: len is only valid when ioctl() is called from user space;
+the kernel implementation of ioctl always passes 0 in the len
+field.
+
+status_t select_hook(void *cookie, uint8 event, uint32 ref,
+                                        selectsync *sync);
+status_t deselect_hook(void *cookie, uint8 event,
+                                        selectsync *sync);
+
+These hooks are for future use; their corresponding entries
+in the device_hooks structure should be set to NULL for now.
+
+Thread Awareness
+
+The following rules apply for any given open instance of a
+driver:
+
+1. open() will be called first, and no other hooks will be
+   called until it has completed.
+
+2. close() may be called while there are pending
+   read/readv/write/writev/ioctl commands. Again, blocking
+   drivers must unblock any outstanding transactions. Calls
+   to read/readv/write/writev/ioctl may occur after the
+   close() hook is called. The driver should return failure
+   in response to any such requests.
+
+3. free() is not called until all the pending transactions
+   for an open instance have completed.
+
+4. Multiple threads may be accessing the
+   read/readv/write/writev/ioctl/close hooks of the driver
+   simultaneously, even for a single open instance, so you
+   must be careful to lock as needed.
+
+Sample Code
+
+I've put together a sample device driver that you can find at
+<ftp://ftp.be.com/pub/samples/drivers/digit.zip>. After you
+build it, you should place the binary in
+~/config/add-ons/kernel/drivers/bin. You should also create a
+link to it in ~/config/add-ons/kernel/drivers/dev/misc, i.e.:
+
+mkdir -p ~/config/add-ons/kernel/drivers/dev/misc
+cd ~/config/add-ons/kernel/drivers/dev/misc
+ln -s ../../bin/digit .
+
+It creates a simple device in /dev/misc/digit that by default
+presents a reader with 16 bytes of zeros. The value it returns
+can be changed for a particular open instance via either ioctl
+or write, as demonstrated by the test program included in the
+archive. The driver code can be used as a starting point for
+your own drivers.

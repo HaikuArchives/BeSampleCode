@@ -1,0 +1,6 @@
+$(OBJ_DIR)/LoggingConsumerApp.o: LoggingConsumerApp.cpp NodeHarnessApp.h
+$(OBJ_DIR)/NodeHarnessApp.o: NodeHarnessApp.cpp NodeHarnessApp.h NodeHarnessWin.h
+$(OBJ_DIR)/NodeHarnessWin.o: NodeHarnessWin.cpp NodeHarnessWin.h \
+ LoggingConsumer.h LogWriter.h
+$(OBJ_DIR)/LogWriter.o: LogWriter.cpp LogWriter.h
+$(OBJ_DIR)/LoggingConsumer.o: LoggingConsumer.cpp LoggingConsumer.h LogWriter.h

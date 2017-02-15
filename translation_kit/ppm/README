@@ -1,0 +1,46 @@
+PPMTranslator version 1.00
+1998-06-12 -- Copyright 1998 Be Incorporated.
+<hplus@be.com>
+
+To build and install translator: type "make", then do:
+cp obj.[x86|ppc]/PPMTranslator /boot/home/config/add-ons/Translators
+
+The source code in this folder shows you how to build a Translator 
+add-on for the Translation Kit for BeOS. The specific Translator 
+built reads and writes the PPM portable pix-map format, which is a 
+format popular among UNIX image manipulation utilities and some 
+researchers because of its simplicity.
+
+Among the more interesting features are the color space conversion 
+routines found in colorspace.cpp/.h, which you can use in your own 
+programs if you put the Be copyright in your about box, and the 
+fact that the Translator is also its own control panel; if you 
+double-click it, it will show its own settings view. The latter is 
+accomplished by building the Translator as an application that 
+also exports the functions necessary for a Translator add-on, and 
+putting the application where Translators are found, and a link to 
+it in /boot/preferences.
+
+Not all programs work with all color spaces; the higher up in the 
+color space popup the color space is, the higher the chance that 
+programs will work with it. You'll have to experiment yourself. 
+Programs that use BBitmapStream in version R3.1 will not work with 
+any of the B_GRAY or B_CMY color spaces, for instance.
+
+The command-line "translate" tool translates from some format you 
+have a Translator for to the generic data format, or from the 
+generic data format to some format you have a translator for. You 
+can NOT translate directly from, say, PPM to TGA using translate, 
+instead, you have to do this:
+
+translate -o foo.bits foo.ppm
+translate -o foo.tga -t 'tga ' foo.bits
+
+An even more interesting bug is the bug in the TGA, TIFF and BMP 
+translators in R3 that prevent them from actually exporting any 
+data. TGA and BMP are fixed in R3.1.
+
+A more thorough explanation of the goings-on is found in my Be 
+newsletter article for June 24, 1998, which can be found on 
+http://www.be.com/developers/
+

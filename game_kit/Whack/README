@@ -1,0 +1,49 @@
+Whack 2.0
+by Ficus Kirkpatrick
+--------------------
+
+NOTE: Whack only works when your screen is in 16-bit mode.
+
+If you're reading this because you can't compile expressions,
+you are probably running Whack from the obj.(ppc/x86) directory.
+It depends on being run from the same directory as the template
+file, so copy it up a level.
+
+One annoying "feature" of Whack is that you have to save your
+expressions before you can add them to the Favorites list.
+Sorry.  That was pure laziness on my part.
+
+Here are the variables you can use in your expressions:
+
+x	The screen-relative X coordinate of the current pixel
+y	The screen-relative Y coordinate of the current pixel
+ix	The window-relative X coordinate of the current pixel
+iy	The window-relative X coordinate of the current pixel
+f	A number that is incremented once per frame
+t	Time (actually, a number that is incremented once per pixel)
+
+Some of my cool ones:
+
+x+y+f
+((x+y)^0^x+y+f)
+(x^y)+f
+(((x+y)^0^x)+f)
+(((x+f)^y)+(ix^(iy+f))+f)
+(x+f)+ix+(x^(y+f))+f
+x+y+int(sin(x)*f)<<16
+
+Some of Dominic's cool ones:
+
+(((x*f/10)<<16)|((x/(f+1)/10)&0xff)<<8)|((y*f/10)&0xff)
+(((f*(t%10000)*ix)&0xff)<<16)|(((x*(f%100)*iy)&0xff)<<8)|((t*f)&0xff)
+(((f*(t%10000)*ix)&0xff)<<16)|(((x*(f%800)/iy)&0xff)<<8)|((t*f)&0xff)
+(((x*(f%800)/iy)&0xff)<<8)|((t*f)&0xff)
+x+x+f|(y+y+f)<<8|(x+y+f)<<16
+
+Benoit's that gave me the idea:
+
+(x+y)*(x-y)+(f*5)
+
+
+Send mail to ficus@be.com.
+

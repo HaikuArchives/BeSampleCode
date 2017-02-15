@@ -1,0 +1,14 @@
+This project is an input_server add-on.  To use it
+you must install it into: 
+
+   /boot/home/config/add-ons/input_server/devices
+
+and then restart the input_server by typing:
+
+	/system/servers/input_server -q 
+
+in a Terminal window.  When you get tired of
+it you'll have to reinstall the BeOS from cd.  Hah.
+Just kidding.  You just have to delete the file
+from /boot/home/config/add-ons/input_server/devices
+and restart the input server again.

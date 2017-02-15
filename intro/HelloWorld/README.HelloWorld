@@ -1,0 +1,22 @@
+HelloWorld Project README
+=========================
+
+This is the classic "Hello World" app, Be style. It puts the text
+"Hello World" in a window.
+ 
+Files
+=====
+
+The archive should contain the following files:
+
+README.HelloWorld	-- This file
+HelloWorld.proj		-- Metrowerks project file
+HelloWorld.rsrc		-- Application resource file
+makefile		-- project makefile
+
+HelloWorld.cpp		-- Source files
+HelloWorld.h
+HelloWindow.cpp
+HelloWindow.h
+HelloView.cpp
+HelloView.h

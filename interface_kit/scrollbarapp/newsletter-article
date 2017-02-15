@@ -1,0 +1,113 @@
+
+*** Scrolling to Oblivion
+
+Hello again, after my initial idea for a newsletter article fell through, (alas, it even had functional example code), I had to settle on something quick and relatively straight-forward, as QA like the rest of engineering, is quite busy preparing for R4.
+
+Today, we're going to talk about scrolling. <ftp://ftp.be.com/pub/samples/interface_kit/scrollbarapp.zip> In the Be API, there are BScrollBars, and BScrollViews. Most applications use BScrollViews, a few applications that want to over-ride specific behaviour do not use BScrollViews.
+
+Applications like the Tracker with the horizontal scroll bar starting after the status area, and NetPositive with it's scroll bars disappearing and reappearing do not use BScrollViews, they handle the scroll bars themselves. 
+
+However, under normal circumstances, you use BScrollViews and the scroll bars are handled more-or-less automatically. This is the circumstance that we're dealing with in this article today.
+
+Let's start out with a relatively common example for text. Suppose you have a TextView, and you have decided it should have one or more scroll bars. With the Be API its completely painless.
+
+    BTextView *text;
+
+    . . .
+	BRect fr = frame; // derived from the window frame
+	fr.right -= B_V_SCROLL_BAR_WIDTH + 1;
+	fr.bottom -= B_H_SCROLL_BAR_HEIGHT + 1;
+    . . .
+
+    text = new BTextView(fr, "textView", textrect,
+           B_FOLLOW_ALL_SIDES, B_WILL_DRAW | B_NAVIGABLE);
+
+    AddChild(new BScrollView("TextScroll", text, B_FOLLOW_ALL_SIDES,
+                             0, true, true));
+
+The frame must include space around it for the scroll bars. If your frame doesn't take into account the size of the scroll bars, the scroll bars may not be visible, which would make them useless. 
+
+You also need to specify your initial text rectangle. (Note that the text rectangle is specific to the text view and differs from the views frame rectangle.) While the bottom of this rectangle will grow to fit, the left and right coordinates determines things such as where line wrap will occur and where text alignment will be for right and centered alignment. (If you don't use line-wrap, the text disappears when it reaches the bounds of the text rectangle.)
+
+When you create the BScrollView, you specify the BView which will be surrounded and controlled by this BScrollView, followed by your resizing mode and flags as usual, and more importantly, which scroll bars you want to have. (The first being the horizontal, the second being vertical.)
+
+BTextViews handle the scroll bars automatically. The scroll bars will automatically be resized as the contents of the BTextView grows and shrinks. If they can use a fixed text frame, many people will only need to call SetWordWrap(true), and that only if they want word wrapping.  
+
+However, many applications use text views for other purposes than simple direct user input. Medium-sized to large scrollable BTextViews are quite common. Almost all of them have some form of word-wrap. This is all handled exactly the same, if you're wrapping at a constant location, however if your view is being resized, you'll probably want to adjust your text rectangle to match.
+
+There are two different, though non-exclusive, kinds of word-wrap. There's wrapping at a fixed point,  and there's wrapping at the edge of the view. The key to each is when you wrap at a fixed point you emulate physical (ie. hardware) limitations, and when you wrap at the edge of the view, you no longer require the horizontal scroll bar.
+
+The key to wrapping at the edge of the view is to catch FrameResized messages and properly adjust your text frame when they occur.
+
+If you don't want to wrap at all, you need to make sure your text region is large enough for all of your text. Many programs just allocate a presumably larger-than-needed text rectangle. (Examples of this approach include at least one popular programmer's editor on BeWare.) Most other people can get away with simply counting the lines, and finding the longest line availible, though this gets slow with large files.
+
+However, I digress, let's return to scrolling.
+
+BTextviews pretty much take care of themselves, after they're all configured. All of the scroll bar handling is done for you by the BTextView. Views containing images are much more interresting, as you need to create that view and handle the scroll bar on your own.
+
+Images are typically contained in BBitmaps in memory. Views support a variety of pleasant ways to draw BBitmaps. Another pleasantry: though image storage formats vary dramatically, with the Translation Kit it's easy to take a file and get a BBitmap from it. (Providing the appropriate Translator exists for that format, of course.)
+
+	BBitmap *image;
+	image = BTranslationUtils::GetBitmapFile(name);
+
+That's really all you need to get an image from a filename in BeOS. (You must remember to link in the translation kit, as it's not normally included. Its all in libtranslation.so.)
+
+However, oftentimes some scaling may be required. I identify two different types of scaling. There's scaling to fit the window, scaling by some arbitrary percentage. There's also scaling to fit the screen while keeping the aspect ratio, which is actually an adaptation of scaling by a fixed percentage.
+
+The first thing to be aware of, with regard to images and scroll views, is that not much is handled automatically. You're going to need to make some sort of view for the BBitmap to be in, and it will at least need a Draw method.
+
+We've already mentioned the basic BScrollView call, so I won't rehash that. Instead I'll concentrate on things you need to do for non-BTextViews.
+
+Images have a fixed size, and if you're not scaling the image, you'll either have the view background color, or if you've set the background color to a transparent color (either B_TRANSPARENT_32_BIT or B_TRANSPARENT_8_BIT) you'll have garbage in the section of the view not covered by the image. However, by properly setting (and resetting) the size of the BWindow and view involved, you can remidy this problem.
+
+The view containing the image needs to adjust the scroll bars as needed. This includes the proportion, the range, and the steps. Instead of trying to explain what I think are rather straight-forward calls to adjust the scroll bar, here's the section of the code that I used.
+
+void TImageView::FixupScrollbars(void)
+{
+    BRect bounds;
+    BScrollBar *sb;
+
+    bounds = Bounds();
+    float myPixelWidth = bounds.Width();
+    float myPixelHeight = bounds.Height();
+    float maxWidth = 1,maxHeight = 1;
+
+    if(image!=NULL){
+        // get max size of image
+        GetMaxSize(&maxWidth, &maxHeight);
+    } else fprintf(stderr, "Image is null\n");
+
+    float propW = myPixelWidth/maxWidth;
+    float propH = myPixelHeight/maxHeight;
+
+    float rangeW = maxWidth - myPixelWidth;
+    float rangeH = maxHeight - myPixelHeight;
+    if(rangeW < 0) rangeW = 0;
+    if(rangeH < 0) rangeH = 0;
+
+    if ((sb=ScrollBar(B_HORIZONTAL))!=NULL) {
+        sb->SetProportion(propW);
+        sb->SetRange(0, rangeW);
+        // Steps are 1/8 visible window for small steps
+        //   and 1/2 visible window for large steps
+        sb->SetSteps(myPixelWidth / 8.0, myPixelWidth / 2.0);
+    }
+
+    if ((sb=ScrollBar(B_VERTICAL))!=NULL) {
+        sb->SetProportion(propH);
+        sb->SetRange(0, rangeH);
+        // Steps are 1/8 visible window for small steps
+        //   and 1/2 visible window for large steps
+        sb->SetSteps(myPixelHeight / 8.0, myPixelHeight / 2.0);
+    }
+}
+
+For the views FrameResized, as well as any other place it may change, a simple call to FixupScrollbars adjusts the scroll bars.
+
+As I've mentioned scaling images periodically, you might now be wondering what's needed to scale the image. Would you believe: nothing? The DrawBitmap methods allow you to specify source and destination rectangles, and if they're different in size, the source rectangle will be scaled appropriately.
+
+The sample code is readily availible. It can handle images and text files. For images it shows them maximized to perspective and zoomed. For text files, it starts out not wrapping them. 
+
+As far too few image programs actually allow you to view files maximized to perspective, the sample code should even be mildly useful. (If you view it as an excuse to learn some Tracker scripting, too, it could be highly useful for those who wish to browse image files.)
+
+I lifted some of the image-related stuffs from George Hoffman's QuickPaint sample code, so I must credit him.

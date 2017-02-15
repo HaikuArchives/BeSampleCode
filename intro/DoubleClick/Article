@@ -1,0 +1,39 @@
+DEVELOPER WORKSHOP:  Please Do Not Press this Button Again
+by Christopher Tate (ctate@be.com)
+
+One question we field regularly in DTS is how to detect and handle multiple mouse clicks. On the face of it, it's not entirely clear what a poor application is supposed to do; after all, the BView class's MouseDown() method doesn't supply any information other than the location of the click.  That alone isn't enough to distinguish two single-clicks from a canonical "double-click"; one needs the timing information as well. Or does one?
+
+The Interface Kit is, indeed, keeping an eye on its internal stopwatch when it reports mouse events to your application.  The user-configurable timing threshold is compared against the time between mouse-down events; as the user accumulates multiple clicks within that threshold, a click count is incremented. That count is passed to your application along with each mouse-down BMessage, in a field called (naturally enough) "clicks."
+
+All this begs the question of how to access the information. Mouse-down events are handled behind the application's back, so to speak; the MouseDown() method is called invisibly from within the BWindow class's message dispatching logic. But there is a solution! BWindows are, like all BeOS message recipients, descendants of the BLooper class, and that class provides a way for its methods to inspect the BMessage currently being dispatched. The way a BView can determine the cumulative click count associated with a MouseDown() call is to look at the current message being handled by the view's looper -- i.e., its window.
+
+You can see an example of this in today's sample application, called DoubleClick, available at this URL:
+
+    ftp://ftp.be.com/pub/samples/intro/DoubleClick.zip
+
+The DoubleClick application displays a window that indicates how many consecutive clicks it receives. That determination is easy under the BeOS, and doesn't require any calculations or state maintenance within the application's code. In the DoubleClickView's MouseDown() method, the following two statements occur:
+
+    BMessage* msg = Window()->CurrentMessage();
+    int32 clicks = msg->FindInt32("clicks");
+
+That's all! The application can now choose an action to take based on the click count. This implies that a multiple click consists of several distinct MouseDown() events, the first of which is indistinguishable from an ordinary single- click action. This is deliberate: multiple click actions must always build on their fewer-click predecessors, not replace them. A good example is the traditional word processor click sequence. The first click positions the insertion point, the second highlights the word around that point, the third highlights the entire line, and the fourth selects the entire paragraph. Each stage is an extension of the previous one; this is good design.
+
+There is other information in the mouse-down BMessage, such as the identity of the button that was pressed and the click location in the view's and the main screen's coordinate systems. This raises issues that complicate the subject of multiple-click detection. First, does it make sense to consider two clicks that are "far apart" on the screen to constitute a "double-click," presumably with modified behavior? Second, does it make sense to treat a rapid sequence of clicks by different mouse buttons as a "multiple click?"
+
+DoubleClick doesn't address the first issue, but it does handle the second correctly. Briefly, the Official BeOS User Interface Decree is that a "double-click" means two clicks of the same mouse button, uninterrupted by other mouse buttons. It turns out that supporting this definition involves some extra bookkeeping on the application's part, because the mouse-down messages' "clicks" fields continue to increment even when the user presses several different buttons in quick succession. A fast primary-secondary-primary mouse button sequence winds up with the third mouse-down message indicating a "clicks" value of 3. This is patently wrong; each of these clicks should be treated as a distinct single click. A tangled situation, no?
+
+The way DoubleClick unravels this snarl is to maintain two extra pieces of information that describe the ongoing mouse-click sequence: the identity of the last button pressed and its own click count specifically for that button. Whenever a new button is pressed the ongoing count is reset to one. Similarly, if the "clicks" field in the mouse-down BMessage is ever equal to 1, that means the multiple-click timeout has expired and click counting should be reset. The code that implements this logic looks like this:
+
+    BMessage* msg = Window()->CurrentMessage();
+    int32 clicks = msg->FindInt32("clicks");
+    int32 button = msg->FindInt32("buttons");
+
+    // is this a continuing click sequence?
+    if ((button == mLastButton) && (clicks > 1))
+    {
+        mClickCount++;
+    }
+    else mClickCount = 1;
+    mLastButton = button;
+
+At this point, "mClickCount" is the correct number of clicks of the relevant mouse button. The application should use that value in deciding the appropriate action.

@@ -1,0 +1,21 @@
+DropWorld Project README
+=========================
+
+DropWorld is a modified Hello World. It displays the name of a file dropped on its icon, or on the window itself.  If you launch DropWorld from a terminal you can see some output, too.
+
+Files
+=====
+
+The archive should contain the following files:
+
+README.DropWorld	-- This file
+DropWorld.proj		-- Metrowerks project file
+DropWorld.rsrc		-- Application resource file
+makefile			-- project makefile
+
+DropWorld.cpp		-- Source files
+DropWorld.h		
+DropWindow.cpp
+DropWindow.h
+DropView.cpp
+DropView.h

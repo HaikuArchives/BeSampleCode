@@ -1,0 +1,17 @@
+# makefile for all Interface Kit sample code
+
+LEAFDIRS = \
+	CDButton \
+	Clock \
+	Iterview \
+	MenuWorld \
+	dragme \
+	dynadraw3 \
+	imaging \
+	pot \
+	scrollbarapp
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

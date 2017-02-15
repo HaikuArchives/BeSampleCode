@@ -1,0 +1,243 @@
+DEVELOPERS' WORKSHOP: The Bitchin' Async
+By Owen Smith, DTS Engineer <orpheus@be.com>
+
+Recent events, such as, say, the intense effort to get R4
+out the door, have inspired me to keep this article short
+and sweet.
+
+I'll be addressing R4's asynchronous control capabilities
+in this article. These have already been covered in the R4
+Beta release notes (with a few not-quite-correct points that
+will be cleared up here), and The Animal's most nifty
+summary article:
+<http://www.be.com/aboutbe/benewsletter/volume_II/
+Issue45.html>
+
+My simple contribution here is to add some sample code so
+that you can see these controls in action.
+
+Enter Pot, the kitchen utensil for this week:
+<ftp://ftp.be.com/pub/samples/interface_kit/pot.zip>
+
+Actually, Pot doesn't refer to a kitchen utensil, nor to a
+beefy roast, nor even to that medicinal restorative which
+entertains countless carefree souls, but rather to a simple
+BControl-derived class that implements a rotating dial.
+I've also thrown in, absolutely free of charge, a test
+application which shows this control in action (and
+demonstrates the new B_OP_ALPHA mode on the side).
+
+Whither Async?
+
+New programmers and/or programmers coming from MFC or other
+async-friendly APIs probably won't need much motivation to
+start taking advantage of asynchronous controls. For those
+coming from the BeOS R3 world of controls, though, some
+justification may be in order.
+
+Here's how your control might have handled mouse movements
+in the past:
+
+void ArthriticCtrl::MouseDown(BPoint where)
+{
+	// handle mouse down
+
+	BPoint prev = where;
+	uint32 buttons;
+	do {
+		snooze(40000);
+		GetMouse(&where, &buttons);
+		if (buttons && (where != prev)) {
+			// handle mouse moved
+		}
+	} while (buttons);
+
+	// handle mouse up
+}
+
+There are two big wins you can get by moving to asynchronous
+controls:
+
+* Simplicity. In the previous case you have to write a mouse
+processing loop and call a lower-level mouse handling
+function to figure out when the mouse is moved and released.
+With asynchronous controls, almost all of this work is done
+for you. All you have to do is write the code to handle the
+mouse moved and mouse button release.
+
+* Performance. The code listed above is inefficient because
+it forces the looper to sleep while it's not handling mouse
+functions. (Note that simply removing the snooze doesn't
+alleviate this situation at all, and degrades system
+performance!) With asynchronous controls, your looper is
+free to handle other messages while waiting for mouse input,
+which allows your control to remain responsive to other
+events.
+
+Implementing Asynchronous Controls
+
+Here are four simple steps to asynchronous nirvana if you're
+deriving from BControl:
+
+* Inside MouseDown, when you want to track the mouse
+movement, you need to tell the app_server that you want to
+receive all the generated mouse events while the mouse is
+moving -- including movements outside of your view!
+Usually you'll want to use SetMouseEventMask, because the
+tracking is automatically ended for you when the mouse
+button is released.
+
+* Mouse movements are usually sent to you whenever the mouse
+is over the view -- not necessarily when you're tracking the
+mouse. So, you also need to keep track inside your class of
+when you're actively tracking mouse movement. BControl
+provides two functions, SetTracking and IsTracking, that do
+this for you. Call SetTracking(true) from within MouseDown,
+and you'll be on your way.
+
+* Override MouseMoved, and if you're currently tracking the
+mouse (IsTracking() == true), do whatever you need to do
+when the mouse moves.
+
+* Override MouseUp, and if you're currently tracking the
+mouse (IsTracking() == true), call SetTracking(false) after
+you've finished handling the mouse up event, to mark that
+you've finished tracking the mouse.
+
+BPot, my twiddle-happy control example, shows how this is
+done.
+
+Using Interface Kit Controls
+
+BButton, BCheckBox, and all the other Interface Kit
+classes that derive from BControl, now lead a two-faced
+existence. For compatibility's sake, they track mouse
+movement the old way (using the mouse processing loop in
+MouseDown) by default. However, they can be told to use
+the asynchronous method instead. You tell these controls
+to use the new implementation by passing the flag
+B_ASYNCHRONOUS_CONTROLS to their parent window. Because of
+the performance gain that the asynchronous method offers,
+you'll probably want to enable asynchronous controls in
+your windows, unless you're doing something special with
+the controls that depends on their previous mouse handling
+behavior.
+
+If you're deriving from any of these classes, you can of
+course completely replace their mouse handling behavior, or
+leave their mouse handling code alone. However, if you want
+to augment their existing behavior, you need to be careful
+that you're working with them correctly:
+
+* Make sure B_ASYNCHRONOUS_CONTROLS is set in the parent
+window if you want them to handle things asynchronously --
+otherwise, you'll be in for a rude shock when the
+implementation's MouseDown is called!
+
+* If you call the inherited MouseDown, ALWAYS call the
+inherited MouseMoved and MouseUp as well if you override
+these functions. Many of the Interface Kit controls set up
+a special state in MouseDown that needs to be modified or
+cleaned up when the mouse is moved or released.
+
+* If you call the inherited MouseDown, you needn't take the
+liberty of calling SetMouseEventMask and SetTracking in the
+code -- these calls will be taken care of in the inherited
+function, so long as you've set B_ASYNCHRONOUS_CONTROLS
+correctly in the window.
+
+Tweaking Asynchronous Behavior
+
+Last week's article covered these, but to recap, there are
+several ways you can tweak the asynchronous behavior to Do
+The Right Thing (tm), depending on what your needs are:
+
+* You have a burning desire to capture not only MouseMoved
+and MouseUp events which occur outside of your view, but
+also MouseDown events. Or, let's say you want to receive
+mouse events which occur outside of your view all the time.
+SetMouseEventMask just won't cut it here, because it gets
+turned off when the mouse is released, at which point you'd
+need to concoct some way to turn it back on. Rather, use
+the more powerful SetEventMask, which is called in exactly
+the same way as SetMouseEventMask, and does essentially the
+same thing, but stays in effect until you explicitly turn it
+off (using the call SetEventMask(0)).
+
+* You'd really rather that Focus Follows Mouse doesn't steal
+the glory from your window when one of the child views is
+trying to track the mouse. Pass the flag B_LOCK_WINDOW_FOCUS
+as an option to SetMouseEventMask, and you'll ensure that
+the focus doesn't change while you're tracking the mouse.
+(This option doesn't have any effect when it's passed to
+SetEventMask; only SetMouseEventMask supports it.)
+
+* You notice that MouseUp events don't get handled until
+several seconds after you release the mouse. The problem
+here may be that your MouseMoved implementation is taking
+too long -- I can receive upwards of 90 mouse events per
+second on my machine, and if each MouseMoved call takes
+.1 s to complete, the message queue deficit builds up
+awfully quickly. One way to keep the queue clean, and keep
+your application responsive, is to discard intermediate
+MouseMoved events while you're busy tracking the mouse. The
+B_NO_POINTER_HISTORY option in SetMouseEventMask takes care
+of this for you, so that your queue only has one pending
+MouseMoved event at a time.
+
+This problem is a symptom of a larger problem that afflicts
+many Be applications: the more time you spend in message
+handling functions, the less responsive your looper becomes.
+In this case, discarding MouseMoved events may still have
+the undesirable effect of skipping user input, and
+suspending other looper activities, while an event is being
+processed. An even better solution, when it's feasible, is
+to reduce the time the looper spends processing the
+messages, by accumulating results before performing
+expensive operations on them, or passing off expensive
+calculations to helper threads. Doing this frees up your
+looper to respond to user events, and improves the visible
+performance of your application.
+
+* You want to receive keyboard events, or want to keep the
+focus views from receiving keyboard events. Add
+B_KEYBOARD_EVENTS to the mask, or add B_SUSPEND_VIEW_FOCUS
+to the options you pass to SetMouseEventMask.
+(B_SUSPEND_VIEW_FOCUS also doesn't have an effect on
+SetEventMask; only SetMouseEventMask supports it.)
+
+
+Using Asynchronous Mouse Handling in Doodle
+
+Of course, you can use this shiny new mouse handling
+behavior in other places than controls. In fact, any
+BView-derived class can take advantage of the event mask.
+You'll probably need to conjure up some equivalent to
+BControl's SetTracking and IsTracking, though; a simple
+bool in your class ought to take care of this.
+
+In trying to keep with the times, I've altered Doodle yet
+again so that the document view can take advantage of
+asynchronous mouse handling (which really is a lot closer
+to the way that the MFC library in Windows does things).
+The new version of Doodle's source code can be found among
+the optional items on the up-and-coming R4 CD-ROM, in:
+
+/boot/optional/sample-code/doodle/
+
+One big difference between the BeOS approach and the Windows
+approach here is the number of simultaneous objects that can
+"capture the mouse" (i.e., receive all mouse events). In
+Windows, only one view at a time captures the mouse, and
+instead of something like IsTracking(), you craft your code
+in OnMouseMove to check to see whether the current view with
+the capture is your view. In the BeOS, any number of views can
+capture the mouse simultaneously, so each view needs to keep
+track separately of whether they are currently capturing
+the mouse. Also notice that the event mask in BeOS is more
+flexible, allowing both mouse and keyboard events to be
+captured, and giving you ways to tweak the behavior that
+I've described above.
+
+That wraps it up for this week. Back to my post-release
+hibernation...

@@ -1,0 +1,123 @@
+R4 Drag and Drop
+
+One of the nice things we added in R4 was a more flexible drag and
+drop protocol. Many of our illustrious developers have already peeked
+inside the BMessage being dragged when you grab a clipping from
+ShowImage in an effort to try and figure out how it works, but because
+it actually involves more than one message, and we would like all
+programs on BeOS to do the right thing, I'm going to document what the
+current protocol is.
+
+First, the code! You can find it at:
+
+ftp://ftp.b500.com/pub/BeOS/dragme.zip
+
+The operation of the application is simple. You start it, and it shows
+a window with a little image in it. You can click on the image to drag
+it around on your screen. If you drag the image to a Tracker window,
+the Tracker will create a clipping file that the application saves the
+image into. If you drag the image to the Trash can, the application
+will close the window, which is the only way the application knows how
+to remove the image. While not the best example of intuitive user
+interface design, it serves the purpose of illustrating drag-and-drop
+pretty well.
+
+The basic idea behind the new drag-and-drop protocol (DnD for short)
+is that the initiator of the drag doesn't have to produce the data in
+all formats it can possibly generate just to start dragging. Instead,
+it puts a list of the formats it knows how to generate using the data
+being dragged into the message. In this case, the DragView inside the
+DragMe window is the initiator.
+
+The receipient of the drag message, in this case the Tracker, can then
+look through the message for data formats it likes, and send a reply
+to the message back to the initiator, asking for one particular out of
+these formats. Currently, the Tracker uses the first format added to
+the list of formats, unless you hold down the control key, in which
+case it gives you a list of possible formats, or the option to cancel
+the drag altogether. Note that DragMe only provides one format of data
+while ShowImage provides all possible formats available through the
+Translation Kit.
+
+Once the target (in this case the Tracker) chooses a format and sends
+a message back to the initiator, the initiator extracts all the data
+it needs from its internal data storage, and puts it either in a new
+message sent back to the target, or in a newly created file specified
+by the target. If the data is sent back to the target in a BMessage,
+this message is called the "data message" as opposed to the "dragged
+message" which was the first message, or the "reply" sent from the
+target to the initiator. That the target creates the file has to do
+with needingto preserve the drop point as the icon location in the
+Tracker window, something which is better kept internal to the target
+than exposed in the API.
+
+The nitty-gritty of setting up the drag is found inside
+DragView::MouseDown(). After some pre-amble, figuring out whether we
+actually clicked in the bitmap and are wanting to drag it, we add the
+types of data we can provide to the message, along with the actual
+actions we accept. The MIME type we use to export data comes from the
+first Translator we find that can save bitmap images, found and
+remembered in the constructor of the DragView class.
+
+The MIME string of data types you know how to provide should be added
+to the drag message in the attribute named "be:types". 
+The magic type B_FILE_MIME_TYPE means that we can create "a file" in
+addition to MIME data within a data message. It's OK to not add any
+other types at all, if all you know how to do is to save files,
+although that will make direct data exchange between your application
+and other applications impossible without using temporary files, so 
+you typically want to do both.
+
+If you use the B_FILE_MIME_TYPE type, you should also add the MIME
+types of files you know how to create (which may be different from the
+types you know how to put in data messages) into the attribute
+"be:filetypes".
+
+DragView uses a copy of the content BBitmap as the drag indicator. 
+That works fine beacuse the bitmap is small. If the bitmap is larger,
+you should consider just dragging an outline BRect. You will note that
+we use the new form of DragMessage found in R4, which allows you to
+specify a drawing mode for the dragging; we use B_OP_ALPHA because we
+prepare the dragging BBitmap specifically with alpha in mind. We also
+specify the window (rather than the view) as the reply destination for
+the dragged message.
+
+The actions we know about are B_COPY_TARGET and B_TRASH_TARGET; the
+former has the target send a request for data as reply; the latter 
+does not require you to send the data anywhere, but instead indicates
+that the target wants you to remove the data being dragged (typically
+because the user dragged to the Trash). Possible actions are added
+to the "be:actions" attribute of the drag message.
+
+The "be:clip_name" attribute is optional, and gives a hint to the
+destination for what the file name might be if it wants to create a
+clipping file. Note that the target is free to ignore this hint and
+create a clipping file with any name it wants.
+
+In DragWindow::MessageReceived(), we receive the reply from the target
+and dispatch on the action found in the "what" code. For the
+B_TRASH_TARGET case, we close the window (with a confirmation dialog
+for good measure). For B_COPY_TARGET, we figure out whether to write
+data to a file (B_FILE_MIME_TYPE) or to the message directly. In both
+cases do we use the Translation Kit to translate from a BBitmapStream
+to the data type found in the DragView constructor; we do this beacuse
+it's convenient, but the Translation Kit is entirely optional and not
+at all required to implement the underlying dragging protocol.
+
+So what do you have to do to be at the receiving end of this protocol?
+Not much, really. You receive B_SIMPLE_DATA messages just like with
+messages that have real data in them. If the B_SIMPLE_DATA message does
+not have a data type you understand in it, you can look for be:types to
+see if the initiator can provide data of some type you understand. If
+so, you send a reply back to the initiator (using SendReply()) with the
+type you want in "be:types" (and file type in "be:filetypes" if you
+want a B_FILE_MIME_TYPE) and the "what" code set to the action you
+want (typically B_COPY_TARGET). In reply to this message, you will
+receive a B_MIME_DATA message with the data in it, or, if you requested
+a file, the initiator will save the data to disk and then send a
+message back to you. DragMe, in this case, uses the default message
+error mechanism so you should probably not fail on error messages
+received in reply to file save requests.
+
+That's it. Now don't drag your feet; go and implement drag-and-drop in
+your application today!

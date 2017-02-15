@@ -1,0 +1,153 @@
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+BE ENGINEERING INSIGHTS: Programmink Ze Quernelle, Part 3:
+  Le Module
+By Ficus Kirkpatrick -- <ficus@be.com>
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This article is about kernel modules (hereafter, "modules").
+I will, for the sake of article autonomy, repeat some of
+what Mani said in his overview article, but if you haven't
+read it, you should. I command thee:
+
+<http://www.be.com/aboutbe/benewsletter/volume_III/Issue21.html>
+
+As an example, we will use the until-recently-fictitious
+"xyz5038" module, which provides an interface to the still-
+fictitious XYZ Systems Model 5038 Squarepusher chip, a
+mainstay of many popular squarepushing peripherals. It's a
+simple chip, and has only two hardware registers, FOO and
+BAR. You can find the code for the "xyz5038" module at
+
+<ftp://ftp.be.com/pub/samples/drivers/xyz5038.zip>
+
+
+Using Modules
+
+Modules export an API through a structure containing
+pointers to the functions the module provides, and any
+other ancillary information:
+
+#define XYZ5038_MODULE_NAME		"generic/xyz5038/v1"
+
+struct xyz5038_module_info {
+	module_info		module;
+
+	// returns contents of FOO
+	int32 (*read_foo)();
+	// returns contents of BAR
+	int32 (*read_bar)();
+	// returns previous contents of FOO
+	int32 (*write_foo)(int32 new_value);
+	// returns previous contents of BAR
+	int32 (*write_bar)(int32 new_value);
+};
+
+In order to use these functions, all you have to do is ask
+the kernel for a pointer to this structure, and you're in
+business:
+
+	struct xyz5038_module_info *xyz5038 = NULL;
+
+	// get a pointer to the xyz5038 module
+	get_module(XYZ5038_MODULE_NAME,
+			  (module_info **)&xyz5038);
+	// read the value of FOO
+	foo = xyz5038->read_foo();
+
+When you've no more use for the module, simply tell the
+kernel so:
+
+	put_module(XYZ5038_MODULE_NAME);
+
+Your practical use of modules will be dependent on the
+functions exported by the ones you use, but that's all you
+need to get started using them.
+
+
+Writing Modules
+
+Creating your own module is a matter of extending the basic
+one defined in <module.h>. Note that the first field in
+xyz5038_module_info is a module_info:
+
+	struct module_info {
+		const char	*name;
+		uint32		flags;
+		status_t	(*std_ops);
+	}
+
+The "name" field should be the name you provide in the
+header file for your module; in this case,
+XYZ5038_MODULE_NAME (or "generic/xyz5038/v1").
+
+The "flags" field, surprisingly enough, is how you indicate
+which flags you want to be in effect for your module.
+B_KEEP_LOADED is currently the only flag there is.
+
+The first time someone calls get_module() with your module's
+name, the kernel loads it. With every subsequent call, a
+reference count associated with your module is incremented.
+Every time someone calls put_module() with your module's
+name, that reference count is decremented, and when it
+reaches zero, your module is unloaded -- unless you set
+B_KEEP_LOADED.
+
+"std_ops" is pointer to a function you provide that deals
+with standard module operations. Currently, the only two
+things that entails are initialization and uninitialization.
+std_ops() usually looks like this:
+
+	static status_t
+	std_ops(int32 op, ...)
+	{
+		switch(op) {
+		case B_MODULE_INIT:
+			module_init_hijinks();
+			break;
+		case B_MODULE_UNINIT:
+			module_uninit_shenanigans();
+			break;
+		default:
+			return B_ERROR;
+		}
+		return B_OK;
+	}
+
+Exporting your module to the outside world is similar to
+publishing device driver hooks, but since you are the one
+defining the hooks, there are a few twists. You'll need to
+have a filled-out version of your module info struct:
+
+	static struct xyz5038_module_info
+	xyz5038_module = {
+		// module_info for the kernel
+		{
+			XYZ5038_MODULE_NAME,
+			0,
+			std_ops
+		},
+		read_foo,
+		read_bar,
+		write_foo,
+		write_bar
+	};
+
+When loading your module, the kernel looks for a symbol
+called "modules", which contains a list of pointers to the
+modules you export, terminated by a NULL:
+
+	_EXPORT module_info *modules[] = {
+		(module_info *)&xyz5038_module_info,
+		NULL
+	};
+
+Clever readers may have surmised by now that in the same
+process of including module_info to make your own module,
+APIs can be defined on top of that and then extended in
+other modules. As a matter of fact, this has already been
+done with bus managers, and it will be discussed in a future
+article.
+
+I'd like to tell a joke to end my article with something
+funny, but all the ones I know would probably be removed
+during editing. [Editor's note: Not necessarily.] Sorry.

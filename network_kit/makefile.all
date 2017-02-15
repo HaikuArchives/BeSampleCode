@@ -1,0 +1,12 @@
+# makefile for all Network Kit sample code
+
+LEAFDIRS = \
+	FtpClient \
+	NetDisc \
+	Tank \
+	VoteOften
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

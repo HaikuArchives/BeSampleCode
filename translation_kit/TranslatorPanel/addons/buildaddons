@@ -1,0 +1,10 @@
+make -f makefile.Greyscale
+make -f makefile.Edges
+make -f makefile.Blur
+# One set of these will fail, but so what?
+mv obj.x86/GreyscaleFilter .
+mv obj.x86/EdgesFilter .
+mv obj.x86/BlurFilter .
+mv obj.ppc/GreyscaleFilter .
+mv obj.ppc/EdgesFilter .
+mv obj.ppc/BlurFilter .

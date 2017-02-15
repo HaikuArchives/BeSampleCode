@@ -1,0 +1,9 @@
+# makefile for all Support Kit sample code
+
+LEAFDIRS = \
+	MultiLock
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done

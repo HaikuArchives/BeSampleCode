@@ -1,0 +1,12 @@
+# makefile for all Translation Kit sample code
+
+LEAFDIRS = \
+	ppm \
+	translate \
+	TranslatorPanel \
+	TranslatorTemplate
+
+default .DEFAULT:
+	-@for f in $(LEAFDIRS); do \
+		$(MAKE) -C $$f $@; \
+	done
