@@ -18,6 +18,8 @@
 #include <String.h>
 #include <Window.h>
 #include <View.h>
+#include <Menu.h>
+#include <TextView.h>
 
 class SendView;
 

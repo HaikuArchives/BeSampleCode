@@ -7,6 +7,7 @@
 #define _propdump_h
 
 #include <String.h>
+#include <PropertyInfo.h>
 
 enum {
 	MSG_IS_SPEC = 0x00000001,
