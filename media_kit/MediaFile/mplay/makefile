@@ -15,8 +15,8 @@ ifeq ($(BE_HOST_CPU), ppc)
     LFLAGS = 
 	XMAP = -map MediaPlayer.xMAP
 else
-    OPTIMIZER = -O1 -no-fpic
-    LFLAGS = -lbe -lmedia -ltracker
+    OPTIMIZER = -O1 
+    LFLAGS = -lbe -lmedia -ltracker -lstdc++
 	XMAP =
 endif
 

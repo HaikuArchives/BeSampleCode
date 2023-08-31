@@ -9,6 +9,8 @@
 #include "TransportButton.h"
 #include "DrawingTidbits.h"
 
+using namespace std;
+
 class BitmapStash {
 // Bitmap stash is a simple class to hold all the lazily-allocated
 // bitmaps that the TransportButton needs when rendering itself.
