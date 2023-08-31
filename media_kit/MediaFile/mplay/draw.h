@@ -2,6 +2,7 @@
 #define DRAW_H
 
 #include <Application.h>
+#include <FilePanel.h>
 
 
 const uint32 msg_WindowClosed = 'Mwcl';
