@@ -1416,7 +1416,7 @@ void
 TMagnify::NudgeMouse(float x, float y)
 {
 	BPoint		loc;
-	ulong		button;
+	uint32		button;
 
 	GetMouse(&loc, &button);
 	ConvertToScreen(&loc);
@@ -1461,7 +1461,7 @@ void
 TMagnify::Update(bool force)
 {
 	BPoint		loc;
-	ulong		button;
+	uint32		button;
 	static long counter = 0;
 
 	GetMouse(&loc, &button);
