@@ -462,7 +462,7 @@ void TWindow::MessageReceived(BMessage *msg)
 			break;
 			}
 		default:
-			inherited::MessageReceived(msg);
+			// MessageReceived(msg);
 			break;
 	}
 }
