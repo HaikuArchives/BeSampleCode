@@ -124,5 +124,5 @@ ifeq ($(INCLUDE_STD_CPLUSPLUS), TRUE)
 endif
 
 ## include the makefile-engine
-include /boot/develop/etc/makefile-engine
+include /boot/system/develop/etc/makefile-engine
 
