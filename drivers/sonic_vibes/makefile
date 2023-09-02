@@ -98,7 +98,7 @@ LINKER_FLAGS =
 
 
 ## include the makefile-engine
-include /boot/develop/etc/makefile-engine
+include /boot/system/develop/etc/makefile-engine
 
 ## use "make install" to put the new driver in the right place
 ## after building it.

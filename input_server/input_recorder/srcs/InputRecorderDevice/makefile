@@ -97,7 +97,7 @@ LINKER_FLAGS =
 all: _APP_ default
 
 ## include the makefile-engine
-include /boot/develop/etc/makefile-engine
+include /boot/system/develop/etc/makefile-engine
 
 $(TARGET) : _APP_
 _APP_: /system/servers/input_server

@@ -3,9 +3,9 @@
 #	~/config/settings/Eddie/TemplateMakefile
 
 # This template works with the generic makefile in
-#	/boot/develop/etc/makefile-engine
+#	/boot/system/develop/etc/makefile-engine
 # and is a subset of
-#	/boot/develop/etc/makefile
+#	/boot/system/develop/etc/makefile
 
 # you may add stuff here 
 
@@ -47,4 +47,4 @@ LIBS= be
 # you may add stuff here 
 
 
-include /boot/develop/etc/makefile-engine
+include /boot/system/develop/etc/makefile-engine
