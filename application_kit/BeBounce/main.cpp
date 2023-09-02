@@ -462,7 +462,7 @@ void TWindow::MessageReceived(BMessage *msg)
 			break;
 			}
 		default:
-			// MessageReceived(msg);
+			BWindow::MessageReceived(msg);
 			break;
 	}
 }
