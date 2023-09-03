@@ -84,7 +84,7 @@ AppItem::SetString()
 	BEntry entry(&info.ref);
 	
 	fDisplayString.SetTo("");
-	char name[64];
+	char name[B_FILE_NAME_LENGTH];
 	entry.GetName(name);
 	fDisplayString += name;
 	fDisplayString += " (";
@@ -96,8 +96,9 @@ AppItem::SetString()
 
 
 VolItem::VolItem(BVolume *vol)
-	: fDevice(vol->Device())
 {
+	if (!vol) return;
+	fDevice = vol->Device();
 	fID = get_volume_id(fDevice);
 	SetString();
 }
@@ -138,12 +139,12 @@ VolItem::Unmount()
 void 
 VolItem::SetString()
 {
-	char string[64];
-	sprintf(string, "( %20Ld | %3ld )   ", fID, fDevice);
+	char string[B_FILE_NAME_LENGTH];
+	sprintf(string, "( %15Ld | %3ld )   ", fID, fDevice);
 
 	fDisplayString = string;
 
-	char name[64];
+	char name[B_FILE_NAME_LENGTH];
 	BVolume vol(fDevice);
 	vol.GetName(name);
 	fDisplayString += name;

@@ -41,7 +41,7 @@ RSRCS=
 #		naming scheme you need to specify the path to the library
 #		and it's name
 #		library: my_lib.a entry: my_lib.a or path/my_lib.a
-LIBS= be
+LIBS= be stdc++
 		
 #	specify additional paths to directories following the standard
 #	libXXX.so or libXXX.a naming scheme.  You can specify full paths
@@ -84,10 +84,10 @@ SYMBOLS =
 #	specify debug settings
 #	if TRUE will allow application to be run from
 #	a source-level debugger
-DEBUGGER = 
+DEBUGGER =
 
 #	specify additional compiler flags for all files
-COMPILER_FLAGS =
+COMPILER_FLAGS = -fpermissive
 
 #	specify additional linker flags
 LINKER_FLAGS =
