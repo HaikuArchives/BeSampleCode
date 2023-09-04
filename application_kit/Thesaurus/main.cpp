@@ -46,7 +46,7 @@ main(int argc, const char **argv)
 				fprintf(stderr, " --view <view name>      View to check\n");
 				fprintf(stderr, "\n");
 				fprintf(stderr, "   For example, to check the first StyledEdit window, type:\n");
-				fprintf(stderr, "   %s --app StyledEdit --window 0 --view text\n", argv[0]);
+				fprintf(stderr, "   %s --app StyledEdit --window 0 --view textview\n", argv[0]);
 				return 0;
 			} else if (strcmp(option, "--file") == 0) {
 				if (nextArg >= argc) {
