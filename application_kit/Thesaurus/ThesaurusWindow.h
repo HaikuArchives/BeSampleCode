@@ -10,7 +10,9 @@
 #define THESAURUSWINDOW_H
 
 #include <Window.h>
+#include <ListView.h>
 #include <Messenger.h>
+#include <TextControl.h>
 #include "Dictionary.h"
 
 class RemoteTextScanner;

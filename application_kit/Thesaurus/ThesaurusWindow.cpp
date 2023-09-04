@@ -141,12 +141,9 @@ ThesaurusWindow::MessageReceived(BMessage *msg)
 			// Capitalize appropriately
 			BString newString = ((Synonym*)fSynonymList->ItemAt(selection))->value;
 			if (fCurrentWordCase == CAPITALIZED) {
-				if (isalpha(newString[0]))
-					newString[0] = toupper(newString[0]);
+				newString = newString.CapitalizeEachWord();
 			} else if (fCurrentWordCase == ALLCAPS) {
-				for (int i = 0; i < newString.Length(); i++)
-					if (isalpha(newString[i]))
-						newString[i] = toupper(newString[i]);
+				newString = newString.ToUpper();
 			}
 			
 			if (fScanner->ReplaceCurrentWord(newString.String()) == B_OK)
@@ -235,10 +232,8 @@ ThesaurusWindow::FindNextWord()
 			continue;
 		}
 		
-		BString lowercase = word;
-		for (int i = 0; i < lowercase.Length(); i++)
-			if (isalpha(lowercase[i]))
-				lowercase[i] = tolower(lowercase[i]);		
+		BString lowercase(word);
+		lowercase.ToLower();
 			
 		fSynonymList = dictionary.FindAlternateWords(lowercase.String());
 

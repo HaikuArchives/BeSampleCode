@@ -58,8 +58,8 @@ private:
 		{}
 
 		inline ~HashNode() {
-			for (Synonym *s = (Synonym *)fSynonymList->RemoveItem(0L);
-				s; s = (Synonym *)fSynonymList->RemoveItem(0L))
+			for (Synonym *s = (Synonym *)fSynonymList->RemoveItem((int32)0);
+				s; s = (Synonym *)fSynonymList->RemoveItem((int32)0))
 				delete s;
 		}
 		

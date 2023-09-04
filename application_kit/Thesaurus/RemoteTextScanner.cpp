@@ -112,9 +112,8 @@ RemoteTextScanner::HighlightCurrentWord(bool highlight)
 		return err;
 
 	text_run_array *currentSelection;
-	int32 len;
-	err = getTextRunsReply.FindData("result", B_RAW_TYPE, (const void**)
-		&currentSelection, &len);
+	ssize_t len;
+	err = getTextRunsReply.FindData("result", B_RAW_TYPE, (const void**)&currentSelection, &len);
 	if ( err != B_OK)
 		return err;
 		

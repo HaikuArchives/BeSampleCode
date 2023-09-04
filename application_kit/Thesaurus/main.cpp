@@ -71,7 +71,7 @@ main(int argc, const char **argv)
 				window = atoi(argv[nextArg++]);
 			} else if (strcmp(option, "--view") == 0) {
 				if (nextArg >= argc) {
-					fprintf(stderr, "You need to specify an view list!\n");
+					fprintf(stderr, "You need to specify a view list!\n");
 					return -1;
 				}
 
