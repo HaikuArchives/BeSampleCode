@@ -10,6 +10,7 @@
 
 
 #include <Application.h>
+#include <VolumeRoster.h>
 
 class WatcherApp : public BApplication {
 	public:

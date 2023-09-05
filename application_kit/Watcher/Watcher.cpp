@@ -115,7 +115,9 @@ WatcherWindow::AddVols()
 	//create VolItems for the persistant volumes
 	//add them to the display
 	while (fVolRoster->GetNextVolume(&vol) != B_BAD_VALUE) {
-		if (vol.IsPersistent()) {
+		if (vol.InitCheck() == B_OK &&
+		    vol.IsPersistent()) 
+		{
 			VolItem *item = new VolItem(&vol);
 			fList->AddUnder(item, fVols);
 		}

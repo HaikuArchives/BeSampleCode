@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <byteorder.h>
+#include <ByteOrder.h>
 
 /* pseudo-random generator parameters (not very good ones,
    but good enough for what we do here). */
@@ -137,7 +137,7 @@ enum {
 #define		abs(x) 	(((x)>0)?(x):-(x))
 
 /* default background color for the UI. */
-rgb_color	background_color = { 216.0, 216.0, 216.0, 255.0 };
+rgb_color	background_color = { 216, 216, 216, 255 };
 
 /* the 7 colors for stars. */
 static rgb_color	color_list[7] = {

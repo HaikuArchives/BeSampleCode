@@ -11,23 +11,38 @@
 #ifndef PULSEAPP_H
 #define PULSEAPP_H
 
-#include <app/Application.h>
-#include "Prefs.h"
 
-bool LastEnabledCPU(int my_cpu);
-int GetMinimumViewWidth();
-bool LoadInDeskbar();
-void Usage();
+#include <Application.h>
+#include <Catalog.h>
+
+#include "Prefs.h"
+#include "PrefsWindow.h"
+
 
 class PulseApp : public BApplication {
-	public:
-		PulseApp(int argc, char **argv);
-		~PulseApp();
-		
-		Prefs *prefs;
+public:
+							PulseApp(int argc, char **argv);
+							~PulseApp();
 
-	private:
-		void BuildPulse();
+	virtual void			MessageReceived(BMessage* message);
+	virtual void			ReadyToRun();
+	virtual	void			AboutRequested();
+
+private:
+			void			BuildPulse();
+
+public:
+			Prefs*			fPrefs;
+
+private:
+			bool			fRunFromReplicant;
+			bool			fIsRunning;
+			PrefsWindow*	fPrefsWindow;
 };
 
-#endif
+extern bool LastEnabledCPU(unsigned int cpu);
+extern int GetMinimumViewWidth();
+extern bool LoadInDeskbar();
+extern void Usage();
+
+#endif	// PULSEAPP_H

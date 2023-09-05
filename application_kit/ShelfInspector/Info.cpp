@@ -174,7 +174,7 @@ TInfoWindow::~TInfoWindow()
 
 void TInfoWindow::Quit()
 {
-	inherited::Quit();
+	BWindow::Quit();
 }
 
 /*------------------------------------------------------------*/
