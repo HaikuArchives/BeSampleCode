@@ -526,7 +526,7 @@ char	TShowBit::has_selection()
 
 void	TShowBit::change_selection(long h, long v)
 {
-	ulong	buttons;
+	uint	buttons;
 	long	h0;
 	long	v0;
 	BRect	new_select;
