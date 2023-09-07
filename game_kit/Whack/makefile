@@ -62,12 +62,12 @@ LOCAL_INCLUDE_PATHS =
 
 #	specify the level of optimization that you desire
 #	NONE, SOME, FULL
-OPTIMIZE= NONE
+OPTIMIZE= FULL
 
 #	specify any preprocessor symbols to be defined.  The symbols
 #	will be set to a value of 1.  For example specify DEBUG if you want
 #	DEBUG=1 to be set when compiling.
-DEFINES= DEBUG
+DEFINES= 
 
 #	specify special warning levels
 #	if unspecified default warnings will be used
@@ -78,12 +78,12 @@ WARNINGS = ALL
 #	specify whether image symbols will be created
 #	so that stack crawls in the debugger are meaningful
 #	if TRUE symbols will be created
-SYMBOLS = TRUE
+SYMBOLS = 
 
 #	specify debug settings
 #	if TRUE will allow application to be run from
 #	a source-level debugger
-DEBUGGER =  TRUE
+DEBUGGER =  
 
 #	specify additional compiler flags for all files
 COMPILER_FLAGS =
