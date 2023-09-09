@@ -65,7 +65,6 @@ image_id load_accelerant(int fd, GetAccelerantHook *hook) {
 	struct stat st;
 	const static directory_which vols[] = {
 		B_USER_ADDONS_DIRECTORY,
-		B_COMMON_ADDONS_DIRECTORY,
 		B_BEOS_ADDONS_DIRECTORY
 	};
 

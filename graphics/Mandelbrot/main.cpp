@@ -211,7 +211,7 @@ void	TMainWindow::MessageReceived(BMessage *an_event)
 			break;
 		
 		default:
-			inherited::MessageReceived(an_event);
+			BWindow::MessageReceived(an_event);
 			break;
 	}
 }

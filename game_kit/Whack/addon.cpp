@@ -18,22 +18,10 @@
 
 #include "addon.h"
 
-#if __INTEL__
 #define COMPILER_NAME			"gcc"
-#define COMPILER_ADDON_OPTION	"-nostart"
+#define COMPILER_ADDON_OPTION	"-fPIC -shared"
 #define COMPILER_OPTIMIZATION	"-O3"
-#define COMPILER_EXTRA_CRAP		""
-#elif __POWERPC__
-#define COMPILER_NAME			"mwcc"
-#define COMPILER_ADDON_OPTION	"-export whack_frame -export whack_expression -xms"
-#define COMPILER_OPTIMIZATION	"-O7"
-#define COMPILER_EXTRA_CRAP	"/boot/develop/lib/ppc/glue-noinit.a " \
-							"/boot/develop/lib/ppc/init_term_dyn.o " \
-							"/boot/develop/lib/ppc/start_dyn.o " \
-							"-lroot"
-#else
-#error Running on unsupported processors is unsupported.
-#endif
+#define COMPILER_EXTRA_CRAP		"-lroot -lbe -lstdc++"
 
 static int
 find_template_file(char *buffer)
