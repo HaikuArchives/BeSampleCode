@@ -15,6 +15,7 @@
 // frame window would in MFC, i.e. cascade/tiled window arrangement.
 
 #include <Application.h>
+#include <FilePanel.h>
 
 class DudePrefs;
 

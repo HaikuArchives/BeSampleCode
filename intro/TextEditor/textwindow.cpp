@@ -11,6 +11,7 @@
 	This file may be used under the terms of the Be Sample Code License.
 */
 
+#include <File.h>
 #include <Application.h>
 #include <Messenger.h>
 #include <Message.h>
