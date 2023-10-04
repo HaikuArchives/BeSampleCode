@@ -9,6 +9,7 @@
 
 #include <Window.h>
 #include <Messenger.h>
+#include <TextControl.h>
 
 class BQuery;
 class BMenuControl;
