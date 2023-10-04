@@ -9,11 +9,14 @@
 #include <Node.h>
 #include <List.h>
 #include <Locker.h>
+#include <StringItem.h>
+#include <TextView.h>
 
 
 class BList;
 class BLocker;
 class BListView;
+class BStringItem;
 class BStringView;
 class BTextControl;
 
