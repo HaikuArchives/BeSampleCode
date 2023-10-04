@@ -13,6 +13,8 @@
 #ifndef PEOPLEVIEW_H
 #define PEOPLEVIEW_H
 
+#include <PopUpMenu.h>
+
 #include "PeopleApp.h"
 
 #define TEXT_HEIGHT			 16
