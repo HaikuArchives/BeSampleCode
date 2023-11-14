@@ -305,7 +305,7 @@ int32 TWin::_RecordThread(void)
 	}
 	call_device(commandPort, &cmd);
 
-	long code, length;
+	int32 code, length;
 	char *buffer ;
 	BMessage event;
 	int32 eventWhat, lastEventWhat = -1;
@@ -372,13 +372,13 @@ int32 TWin::_RecordThread(void)
 	return (true);	
 }
 
-long TWin::_StartPlayThread(void *arg)
+int32 TWin::_StartPlayThread(void *arg)
 {
 	TWin *self = (TWin *)arg;
 	return (self->_PlayThread() );
 }
 
-long TWin::_PlayThread(void)
+int32 TWin::_PlayThread(void)
 {
 	port_id devicePort;
 	BMessage event;
