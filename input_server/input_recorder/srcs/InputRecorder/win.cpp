@@ -71,7 +71,7 @@ TWin::TWin(BRect frame) : BWindow(frame, DEFAULT_TITLE, B_TITLED_WINDOW, B_NOT_Z
 	
 	_Filename.Unset();
 	char buf[64];
-	sprintf(buf,"/tmp/InputRecord.%Lx",(uint64)find_thread(NULL));
+	sprintf(buf,"/tmp/InputRecord.%" B_PRIx32, find_thread(NULL));
 	__internal_filename.SetTo(buf);
 	
 	_LoopMode = false;
@@ -224,8 +224,8 @@ status_t TWin::_CopyTmpFileToSaveFile(void)
 		do {
 			read = internal.ReadAt(offset, data, blocksize);
 			if(read > 0) writ = real.WriteAt(offset, data, read);
-			else if(read<0) fprintf(stderr, "%s:%d - failed to read offset %Lx (0x%lx) %s\n", __FILE__, __LINE__, offset, read, strerror(read));
-			if(read>0 && writ< 0) fprintf(stderr, "%s:%d - failed to write offset %Lx (0x%lx) %s\n", __FILE__, __LINE__, offset, writ, strerror(writ));
+			else if(read<0) fprintf(stderr, "%s:%d - failed to read offset %" B_PRIxOFF " (0x%lx) %s\n", __FILE__, __LINE__, offset, read, strerror(read));
+			if(read>0 && writ< 0) fprintf(stderr, "%s:%d - failed to write offset %" B_PRIxOFF " (0x%lx) %s\n", __FILE__, __LINE__, offset, writ, strerror(writ));
 			offset += blocksize;
 		}while(read > 0);
 		status_t err;
@@ -236,7 +236,7 @@ status_t TWin::_CopyTmpFileToSaveFile(void)
 				read = internal.ReadAttr(attr, 0, 0, data, blocksize);
 				if(read > 0) writ = real.WriteAttr(attr, 0, 0, data, read);
 				else fprintf(stderr, "%s:%d - failed to read (0x%lx) %s\n", __FILE__, __LINE__, read, strerror(read));
-				if(read>0 && writ< 0) fprintf(stderr, "%s:%d - failed to write offset %Lx (0x%lx) %s\n", __FILE__, __LINE__, offset, writ, strerror(writ));
+				if(read>0 && writ< 0) fprintf(stderr, "%s:%d - failed to write offset %" B_PRIxOFF " (0x%lx) %s\n", __FILE__, __LINE__, offset, writ, strerror(writ));
 			}
 		} while(!err);
 		_SetFileName(NULL, false);
@@ -284,6 +284,7 @@ int32 TWin::_RecordThread(void)
 	if(commandPort < 0){
 		fprintf(stderr, "InputRecorder: unable to find filter port\n");
 		alert = new BAlert("InputRecorderError", "InputRecorder: Unable to find InputFilter", "Gasp");
+		alert->Go();
 		return (B_ERROR);
 	}
 
@@ -305,7 +306,7 @@ int32 TWin::_RecordThread(void)
 	}
 	call_device(commandPort, &cmd);
 
-	long code, length;
+	int32 code, length;
 	char *buffer ;
 	BMessage event;
 	int32 eventWhat, lastEventWhat = -1;
@@ -314,7 +315,7 @@ int32 TWin::_RecordThread(void)
 	msw = new MESSAGEWRITER(__internal_filename.Path(), B_WRITE_ONLY);
 	status_t err = B_OK;
 	if((err = msw->InitCheck())!=B_OK) {
-		printf("%s:%d - Failed to open file for write %s: (0x%lx) %s\n", __FILE__, __LINE__, __internal_filename.Path(), err, strerror(err));
+		printf("%s:%d - Failed to open file for write %s: (0x%" B_PRIx32 ") %s\n", __FILE__, __LINE__, __internal_filename.Path(), err, strerror(err));
 	}
 
 	set_mouse_position(320, 240);
@@ -346,7 +347,7 @@ int32 TWin::_RecordThread(void)
 				lastEventWhat = eventWhat;
 			} else {
 				// I don't think this really occurs. (Steven Black)
-				printf("Recieved: When: %Lx, last %Lx; What: %lx, last  %lx\n", eventWhen,
+				printf("Recieved: When: %" B_PRIx64 ", last %" B_PRIx64 "; What: %" B_PRIx32 ", last  %" B_PRIx32 "\n", eventWhen,
 					lastEventWhen, eventWhat, lastEventWhat);
 			}
 			free(buffer);
@@ -372,18 +373,17 @@ int32 TWin::_RecordThread(void)
 	return (true);	
 }
 
-long TWin::_StartPlayThread(void *arg)
+int32 TWin::_StartPlayThread(void *arg)
 {
 	TWin *self = (TWin *)arg;
 	return (self->_PlayThread() );
 }
 
-long TWin::_PlayThread(void)
+int32 TWin::_PlayThread(void)
 {
 	port_id devicePort;
 	BMessage event;
 	bool first_pass=true;
-	bool end_of_file;
 	bigtime_t lasttime = -1, newtime, offtime;
 	MessageWriter *msr;
 
@@ -410,14 +410,13 @@ long TWin::_PlayThread(void)
 	if(view!=NULL) PostMessage(mess, view);
 	else delete mess;
 
-	end_of_file = false;
 	status_t err;
 	
 	const char *name = __internal_filename.Path();
 	if(_Filename.InitCheck()==B_OK && !_FileDirty) name = _Filename.Path();
 	msr = new MESSAGEWRITER(name,B_READ_ONLY);
 	if((err = msr->InitCheck())!=B_OK) {
-		printf("%s:%d - Failed to open file for read %s: (0x%lx) %s\n", __FILE__, __LINE__, name, err, strerror(err));
+		printf("%s:%d - Failed to open file for read %s: (0x%" B_PRIx32 ") %s\n", __FILE__, __LINE__, name, err, strerror(err));
 	}
 
 	if(_LockMode){
@@ -520,13 +519,13 @@ status_t call_device(port_id devicePort, BMessage *event)
 	if(buffer!=NULL){
 		event->Flatten(buffer, size);
 		if((err = write_port(devicePort, 0, buffer, size))!=B_OK){
-			fprintf(stderr, "Error finding writing to device port: (0x%lx) %s\n", err, strerror(err));
+			fprintf(stderr, "Error finding writing to device port: (0x%" B_PRIx32 ") %s\n", err, strerror(err));
 		}
 		free(buffer);
 	}else{
 		if(errno < 0) err = errno;
 		if(!err) err = B_ERROR;
-		fprintf(stderr, "Failed to allocate space for device buffer: (0x%lx) %s\n", err, strerror(err));
+		fprintf(stderr, "Failed to allocate space for device buffer: (0x%" B_PRIx32 ") %s\n", err, strerror(err));
 	}
 	return(err);
 }

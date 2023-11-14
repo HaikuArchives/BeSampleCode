@@ -104,7 +104,7 @@ void InputRecorderDevice::_WatchPort()
 		err = read_port(_Port, &code, buffer, length);
 		if(err != length) {
 			if(err >= 0) {
-				_sPrintf("InputRecorderDevice: failed to read full packet (read %u of %u)\n",err,length);
+				_sPrintf("InputRecorderDevice: failed to read full packet (read %u of %" B_PRIiSSIZE ")\n",err,length);
 			} else {
 				_sPrintf("InputRecorderDevice: read_port error: (0x%x) %s\n",err,strerror(err));
 			}

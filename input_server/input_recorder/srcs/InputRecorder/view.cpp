@@ -8,6 +8,7 @@
 
 #include <CheckBox.h>
 #include <Path.h>
+#include <Window.h>
   
 #include "view.h"
 #include "main.h"

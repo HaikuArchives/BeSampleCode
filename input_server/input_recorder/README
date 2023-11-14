@@ -6,9 +6,9 @@ Instructions
 
 1. Delete the srcs directory if you are not interested in playing with the source to the input recorder stuffs.
 
-2. Launch the install.sh file located in the input_recorder directory. (From a Terminal or from the Tracker should work.) It will show alert boxes informing you of what it's about to do and allowing you to cancle.
+2. Run 'make install' from the top level input_recorder directory.
 
-3. After the files have been installed, you can remove the binary platform directories if you wish.
+3. After the files have been installed, you can remove the binary platform directories if you wish by running 'make clean'.
 
 4. Start the Input Recorder
 

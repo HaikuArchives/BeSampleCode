@@ -38,7 +38,7 @@ TApp::TApp() : BApplication(APP_SIG)
 	BMimeType mime;
 	status_t err;
 	if((err = mime.SetTo(DATA_TYPE))!=B_OK){
-		fprintf(stderr,"%s:%d - err: (0x%lx) %s\n",__FILE__,__LINE__,err,strerror(err));
+		fprintf(stderr,"%s:%d - err: (0x%" PRIx32 ") %s\n",__FILE__,__LINE__,err,strerror(err));
 	} else if ( !mime.IsInstalled()) {
 		err = mime.Install();
 		err = mime.SetShortDescription("Input Record");
@@ -114,7 +114,7 @@ void TApp::ArgvReceived(int32 argc, char **argv)
 	mess->AddBool("LockInput",dolock);
 
 	status_t err;
-	if((err = WindowAt(0)->PostMessage(mess)) != B_OK) printf("Error : (0x%lx) %s\n", err, strerror(err));
+	if((err = WindowAt(0)->PostMessage(mess)) != B_OK) printf("Error : (0x%" PRIx32 ") %s\n", err, strerror(err));
 
 }
 
