@@ -97,7 +97,7 @@ void InputRecorderFilter::_WatchPort(void)
 		err = read_port(_CommandPort, &code, buffer, length);
 		if(err != length) {
 			if(err >= 0) {
-				_sPrintf("inputRecorderFilter: failed to read full packet (read %u of %u)\n",err,length);
+				_sPrintf("inputRecorderFilter: failed to read full packet (read %u of %" B_PRIiSSIZE ")\n",err,length);
 			} else {
 				_sPrintf("inputRecorderFilter: read_port error: (0x%x) %s\n",err,strerror(err));
 			}
@@ -203,7 +203,7 @@ filter_result InputRecorderFilter::Filter(BMessage *message, BList *outList)
 						if(par==NULL) _First = tmp;
 						else par->next = tmp;
 						cur = tmp;
-						_sPrintf("inputRecorderFilter: port (%d) now owned by different team\n",port, err,strerror(err));
+						_sPrintf("inputRecorderFilter: port (%d) now owned by different team : (0x%x) %s\n",port, err,strerror(err));
 						port = -1;
 					} else {
 						if ( message->Flatten(stream, length) == B_OK) {

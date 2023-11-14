@@ -88,7 +88,7 @@ FlatMessageWriter :: FlatMessageWriter(const char *name, int32 mode)
 					cp+=sizeof(int32);
 					if(data > DATA_VERSION){
 						_Error = T_BAD_VERSION;
-						fprintf(stderr, "Data is of later version: %ld\n", data);
+						fprintf(stderr, "Data is of later version: %" B_PRId32 "\n", data);
 					} else if(data == 1) {
 						if(!memcmp(cp, _VendorClass, strlen(_VendorClass)+1)){
 							cp += strlen(_VendorClass)+1;
@@ -99,7 +99,7 @@ FlatMessageWriter :: FlatMessageWriter(const char *name, int32 mode)
 						cp+=sizeof(int32);
 						if(data != 2) { // once refered to as T_WRITE_NORMAL_FILES
 							_Error = B_UNSUPPORTED;
-							fprintf(stderr, "File is stored in unsupported format: %ld, we only support 2\n", data);
+							fprintf(stderr, "File is stored in unsupported format: %" B_PRId32 ", we only support 2\n", data);
 						} else if(dirtymime){
 							_File->RemoveAttr("BEOS:TYPE");
 							_File->WriteAttr("BEOS:TYPE", B_MIME_TYPE, 0, DATA_TYPE, sizeof(DATA_TYPE));
@@ -129,7 +129,7 @@ void FlatMessageWriter :: ResetFilePointer(void)
 status_t FlatMessageWriter :: Write(BMessage *msg)
 {
 	_Error = msg->Flatten(_File);
-	if(_Error) fprintf(stderr, "%s:%d - Failed to Write Input: (0x%lx) %s\n",__FILE__,__LINE__, _Error, strerror(_Error));
+	if(_Error) fprintf(stderr, "%s:%d - Failed to Write Input: (0x%" B_PRIx32 ") %s\n",__FILE__,__LINE__, _Error, strerror(_Error));
 
 	return(_Error);
 }
@@ -140,7 +140,7 @@ status_t FlatMessageWriter :: Read(BMessage *msg)
 	msg->MakeEmpty();
 	msg->what = 0;
 	_Error = msg->Unflatten(_File);
-	if(_Error) fprintf(stderr, "%s:%d - Failed to Read Input Normally: (0x%lx) %s\n",__FILE__,__LINE__, _Error, strerror(_Error));
+	if(_Error) fprintf(stderr, "%s:%d - Failed to Read Input Normally: (0x%" B_PRIx32 ") %s\n",__FILE__,__LINE__, _Error, strerror(_Error));
 
 	return(_Error);
 }	   
@@ -211,7 +211,7 @@ AttributeMessageWriter :: AttributeMessageWriter(const char *name, int32 mode)
 					cp+=sizeof(int32);
 					if(data > DATA_VERSION){
 						_Error = T_BAD_VERSION;
-						fprintf(stderr, "Data is of later version: %ld\n", data);
+						fprintf(stderr, "Data is of later version: %" B_PRId32 "\n", data);
 					} else if(data == 1) {
 						if(!memcmp(cp, _VendorClass, strlen(_VendorClass)+1)){
 							cp += strlen(_VendorClass)+1;
@@ -222,7 +222,7 @@ AttributeMessageWriter :: AttributeMessageWriter(const char *name, int32 mode)
 						cp+=sizeof(int32);
 						if(data != 1) { // Once refered to as: T_WRITE_ATTRIBUTE_FILES
 							_Error = B_UNSUPPORTED;
-							fprintf(stderr, "File is stored in unsupported format: %ld, we only support 2\n", data);
+							fprintf(stderr, "File is stored in unsupported format: %" B_PRId32 ", we only support 2\n", data);
 						} else if(dirtymime){
 							_File->RemoveAttr("BEOS:TYPE");
 							_File->WriteAttr("BEOS:TYPE", B_MIME_TYPE, 0, DATA_TYPE, sizeof(DATA_TYPE));
@@ -252,7 +252,7 @@ status_t AttributeMessageWriter :: Write(BMessage *msg)
 	size_t length = 0;
 	char *data = NULL;
 
-	sprintf(namebuf, "%s/%08lx",_AttrBase,_Item);
+	sprintf(namebuf, "%s/%08" B_PRIx32,_AttrBase,_Item);
 	length = msg->FlattenedSize();
 	data = (char*)malloc(length);
 	if(data!=NULL){
@@ -274,7 +274,7 @@ status_t AttributeMessageWriter :: Read(BMessage *msg)
 	msg->MakeEmpty();
 	msg->what = 0;
 
-	sprintf(namebuf, "%s/%08lx",_AttrBase,_Item);
+	sprintf(namebuf, "%s/%08" B_PRIx32,_AttrBase,_Item);
 	_Error = _File->GetAttrInfo(namebuf, &info);
 	if(!_Error) data = (char*)malloc(info.size);
 	else data = NULL;
@@ -297,7 +297,7 @@ bool AttributeMessageWriter :: HaveMore(void)
 	attr_info info;
 	bool result = false;
 
-	sprintf(namebuf, "%s/%08lx",_AttrBase,_Item);
+	sprintf(namebuf, "%s/%08" B_PRIx32,_AttrBase,_Item);
 	result = (_File->GetAttrInfo(namebuf, &info) == B_OK);
 
 	return result;
