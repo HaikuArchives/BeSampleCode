@@ -43,7 +43,7 @@ ScriptView::FillList()
 	be_roster->GetAppList(&teams);
 	int32 n = teams.CountItems();
 	for(int32 i=0; i<n; i++){
-		team_id id = (team_id)teams.ItemAt(i);
+		team_id id = (team_id)(addr_t)teams.ItemAt(i);
 		BMessenger msgr(NULL, id);
 		
 		/* ask for App Name */
@@ -144,7 +144,7 @@ ScriptView::Invoke(BMessage *msg)
 		be_roster->GetAppList(&teams);
 		int n = teams.CountItems();
 		for(int i=0; i<n; i++){
-			team_id id = (team_id)teams.ItemAt(i);
+			team_id id = (team_id)(addr_t)teams.ItemAt(i);
 			BMessenger msgr(NULL, id);
 			/* ask for App Name */
 			BMessage name_msg(B_GET_PROPERTY);
