@@ -14,8 +14,10 @@
 class BList;
 class BLocker;
 class BListView;
+class BStringItem;
 class BStringView;
 class BTextControl;
+class BTextView;
 
 //struct for caching query entry info
 typedef struct live_ref {
