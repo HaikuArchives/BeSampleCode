@@ -10,11 +10,12 @@
 #include <Window.h>
 #include <Messenger.h>
 
-class BQuery;
-class BMenuControl;
-class BListView;
-class BStringView;
 class BList;
+class BListView;
+class BMenuControl;
+class BQuery;
+class BStringView;
+class BTextControl;
 
 
 class QueryWindow : public BWindow {
