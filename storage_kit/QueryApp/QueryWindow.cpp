@@ -261,7 +261,7 @@ QueryWindow::FetchQuery()
 	fQuery.GetPredicate(string, len + 1);
 	fQueryString->SetText(string);
 	free(string);
-	
+
 	/* use this application's volume */
 	app_info info;
 	be_app->GetAppInfo(&info);
@@ -271,7 +271,8 @@ QueryWindow::FetchQuery()
 	fQuery.SetVolume(&vol);
 	
 	//fetch the query
-	fQuery.Fetch();
+	if (fQuery.Fetch() != B_OK)
+		return;
 	
 	//Iterate through the entries
 	BEntry entry;
