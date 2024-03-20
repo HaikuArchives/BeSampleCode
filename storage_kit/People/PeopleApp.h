@@ -13,6 +13,8 @@
 #ifndef PEOPLEAPP_H
 #define PEOPLEAPP_H
 
+#include <File.h>
+
 #define	B_PERSON_MIMETYPE	"application/x-person"
 #define APP_SIG				"application/x-vnd.Be-PEPL"
 

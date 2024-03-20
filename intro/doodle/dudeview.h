@@ -13,6 +13,7 @@
 //
 // MFC NOTE: This class is directly analagous to CView.
 
+#include <PrintJob.h>
 #include <View.h>
 
 class DudeDoc;

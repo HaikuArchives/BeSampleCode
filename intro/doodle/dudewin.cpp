@@ -3,7 +3,7 @@
 	This file may be used under the terms of the Be Sample Code License.
 */
 
-#include <algobase.h>
+#include "algobase.h"
 #include <stdio.h>
 #include <string.h>
 #include <Autolock.h>
@@ -11,6 +11,7 @@
 #include <MenuItem.h>
 #include <Screen.h>
 #include <ScrollView.h>
+#include <SupportDefs.h>
 #include "cmdtool.h"
 #include "constants.h"
 #include "doodle.h"
@@ -213,8 +214,8 @@ status_t DudeWin::Init(DudeDoc* pDoc)
 	float maxHeight = m_pDocument->Bounds().Height()
 		+ m_pMenuBar->Frame().Height()
 		+ B_H_SCROLL_BAR_HEIGHT + 1;
-	float minWidth = min(maxWidth, 100.0f);
-	float minHeight = min(maxHeight, 100.0f);
+	float minWidth = min_c(maxWidth, 100.0f);
+	float minHeight = min_c(maxHeight, 100.0f);
 
 	// adjust the window's current size based on new min/max values	
 	float curWidth = Bounds().Width();

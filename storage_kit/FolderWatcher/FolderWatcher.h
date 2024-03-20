@@ -10,6 +10,7 @@
  
 #include <Directory.h>
 #include <List.h>
+#include <Locker.h>
 #include <MessageFilter.h>
 #include <Messenger.h>
 

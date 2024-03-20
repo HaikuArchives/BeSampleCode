@@ -10,6 +10,8 @@
 #include <List.h>
 #include <StopWatch.h>
 
+long Partition(void *castToWorkUnit);
+
 /* for experimentation purposes, these are global */
 int32 SIZE;
 int32 THREADS;

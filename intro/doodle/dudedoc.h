@@ -18,6 +18,9 @@
 // serialization. Also note that this class contains the stuff which would,
 // in MFC, be provided by a document template.
 
+#include <Menu.h>
+#include <FilePanel.h>
+#include <Locker.h>
 #include <Looper.h>
 #include <Entry.h>
 #include "MultiLocker.h"

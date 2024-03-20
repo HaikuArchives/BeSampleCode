@@ -18,6 +18,7 @@
 
 #include <Invoker.h>
 #include <View.h>
+#include <Screen.h>
 
 class ToolbarItem : public BView, public BInvoker
 {

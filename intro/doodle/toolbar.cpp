@@ -3,7 +3,8 @@
 	This file may be used under the terms of the Be Sample Code License.
 */
 
-#include <algobase.h>
+#include "algobase.h"
+#include <SupportDefs.h>
 #include <stdio.h>
 #include <MessageFilter.h>
 #include <Rect.h>
@@ -232,7 +233,7 @@ void Toolbar::CalcLayout()
 		pItem->MoveTo(loc);
 		BRect frame = pItem->Frame();
 		maxRight = loc.x = frame.right + 1;
-		maxBottom = max(maxBottom, frame.bottom);	
+		maxBottom = max_c(maxBottom, frame.bottom);	
 	}
 	
 	// resize the toolbar to fully encompass the layout + margin

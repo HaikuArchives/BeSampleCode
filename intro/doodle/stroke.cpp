@@ -3,7 +3,8 @@
 	This file may be used under the terms of the Be Sample Code License.
 */
 
-#include <algobase.h>
+#include "algobase.h"
+#include <SupportDefs.h>
 #include <Message.h>
 #include <View.h>
 #include "stroke.h"
@@ -177,10 +178,10 @@ void PenStroke::Fix()
 		// MFC NOTE: note that bottom > top in the default
 		// BeOS view coordinates, since the y axis points downwards.
 		pt = PointAt(i);
-		m_rectBounds.left     = min(m_rectBounds.left, pt.x);
-		m_rectBounds.right    = max(m_rectBounds.right, pt.x);
-		m_rectBounds.top      = min(m_rectBounds.top, pt.y);
-		m_rectBounds.bottom   = max(m_rectBounds.bottom, pt.y);
+		m_rectBounds.left     = min_c(m_rectBounds.left, pt.x);
+		m_rectBounds.right    = max_c(m_rectBounds.right, pt.x);
+		m_rectBounds.top      = min_c(m_rectBounds.top, pt.y);
+		m_rectBounds.bottom   = max_c(m_rectBounds.bottom, pt.y);
 	}
 
 	// Add the pen width to the bounding rectangle.  This is necessary

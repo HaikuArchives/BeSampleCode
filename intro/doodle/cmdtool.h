@@ -16,6 +16,7 @@
 // of forcing the application to manage the toolbar, it's more convenient
 // to make this toolbar a global singleton object.
 
+#include <Locker.h>
 #include "toolbar.h"
 
 class CmdToolbar : public Toolbar
